@@ -93,6 +93,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EditorToolbar.cpp" />
+    <ClCompile Include="PinnedWindow.cpp" />
     <ClCompile Include="ScreenshotOverlay.cpp" />
     <QtRcc Include="bytescreenshot.qrc" />
     <QtUic Include="bytescreenshot.ui" />
@@ -109,6 +110,9 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="EditorToolbar.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="PinnedWindow.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
