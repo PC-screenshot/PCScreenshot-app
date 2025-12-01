@@ -11,6 +11,9 @@
 #include <QWheelEvent>
 #include "PinnedWindow.h"
 
+class MosaicBlurController;
+extern MosaicBlurController* g_mosaicBlurController;
+
 ScreenshotOverlay::ScreenshotOverlay(QWidget* parent)
     : QWidget(parent) {
     setWindowFlags(Qt::FramelessWindowHint |
@@ -28,6 +31,17 @@ ScreenshotOverlay::ScreenshotOverlay(QWidget* parent)
 
     connect(toolbar_, &EditorToolbar::ToolSelected,
         this, &ScreenshotOverlay::OnToolSelected);
+
+    // 初始化工具
+    mosaicTool_ = new MosaicTool(this);
+    blurTool_ = new BlurTool(this);
+
+    // 创建二级设置栏（初始隐藏）
+    mosaicPopup_ = mosaicTool_->createSettingsWidget(this);
+    mosaicPopup_->hide();
+
+    blurPopup_ = blurTool_->createSettingsWidget(this);
+    blurPopup_->hide();
 }
 
 void ScreenshotOverlay::SetBackground(const QPixmap& pixmap) {
@@ -200,12 +214,18 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
      
             break;
         }
-        case DrawMode::kMosaic:
-           
+        case DrawMode::kMosaic: {
+            if (!canvas_.isNull()) {
+                MosaicTool::applyEffect(canvas_, area, mosaicTool_->blurLevel());
+            }
             break;
-        case DrawMode::kBlur:
-        
+        }
+        case DrawMode::kBlur: {
+            if (!canvas_.isNull()) {
+                BlurTool::applyEffect(canvas_, area, blurTool_->opacity());
+            }
             break;
+        }
         default:
             break;
         }
@@ -415,10 +435,14 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
     case EditorToolbar::Tool::kMosaic:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kMosaic;
+        // 显示马赛克设置栏
+        showToolPopup(mosaicPopup_);
         break;
     case EditorToolbar::Tool::kBlur:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kBlur;
+        // 显示模糊设置栏
+        showToolPopup(blurPopup_);
         break;
 
     case EditorToolbar::Tool::kColor: {
@@ -481,4 +505,35 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
     default:
         break;
     }
+}
+
+void ScreenshotOverlay::showToolPopup(QWidget* popup) {
+    if (!popup || !toolbar_) return;
+
+    // 获取工具栏在主屏幕的位置
+    QPoint toolbarPos = toolbar_->mapToGlobal(QPoint(0, 0));
+    QRect toolbarRect = toolbar_->rect();
+
+    // 计算弹出位置：工具栏下方中央
+    int x = toolbarPos.x() + (toolbarRect.width() - popup->width()) / 2;
+    int y = toolbarPos.y() + toolbarRect.height() + 8;
+
+    // 确保不超出屏幕边界
+    QScreen* screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        QRect screenRect = screen->availableGeometry();
+        if (x + popup->width() > screenRect.right()) {
+            x = screenRect.right() - popup->width();
+        }
+        if (x < screenRect.left()) {
+            x = screenRect.left();
+        }
+        if (y + popup->height() > screenRect.bottom()) {
+            y = toolbarPos.y() - popup->height() - 8;
+        }
+    }
+
+    popup->move(x, y);
+    popup->show();
+    popup->raise();
 }

@@ -10,6 +10,9 @@ class QWheelEvent;
 
 #include "EditorToolbar.h"
 
+#include "MosaicTool.h"
+#include "BlurTool.h"
+
 // 截图覆盖层：负责选区 + 编辑 + 工具栏 + 导出
 class ScreenshotOverlay : public QWidget {
     Q_OBJECT
@@ -100,4 +103,14 @@ private:
     QVector<QImage> redo_stack_;
 
     EditorToolbar* toolbar_ = nullptr;
+
+    // 工具实例
+    MosaicTool* mosaicTool_;
+    BlurTool* blurTool_;
+
+    // 二级设置栏
+    QWidget* mosaicPopup_;
+    QWidget* blurPopup_;
+
+    void showToolPopup(QWidget* popup);
 };
