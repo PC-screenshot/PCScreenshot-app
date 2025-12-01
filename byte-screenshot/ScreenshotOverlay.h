@@ -1,10 +1,12 @@
-﻿#pragma once
+#pragma once
 
 #include <QWidget>
 #include <QPixmap>
 #include <QRect>
 #include <QVector>
 #include <QColor>
+#include <QPointF>
+class QWheelEvent;
 
 #include "EditorToolbar.h"
 
@@ -33,6 +35,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private:
     // 阶段：选区阶段 vs 编辑阶段
@@ -80,6 +83,9 @@ private:
     QPixmap background_;   // 整个屏幕截图
     QRect   selection_;    // 当前选区
     QPixmap canvas_;       // 选区内部绘制用的画布
+    double zoom_scale_ = 1.0; // 选区内容缩放比例
+    QPointF zoom_center_;
+    QRect ComputeZoomSourceRect(const QSize& content_size) const;
 
     bool is_selecting_ = false;
     bool is_moving_ = false;
@@ -108,4 +114,3 @@ private:
 
     void showToolPopup(QWidget* popup);
 };
-

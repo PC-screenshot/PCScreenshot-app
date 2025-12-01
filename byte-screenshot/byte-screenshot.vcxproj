@@ -94,6 +94,7 @@
   <ItemGroup>
     <ClCompile Include="BlurTool.cpp" />
     <ClCompile Include="EditorToolbar.cpp" />
+    <ClCompile Include="PinnedWindow.cpp" />
     <ClCompile Include="MosaicTool.cpp" />
     <ClCompile Include="ScreenshotOverlay.cpp" />
     <QtRcc Include="bytescreenshot.qrc" />
@@ -113,6 +114,7 @@
     <QtMoc Include="EditorToolbar.h" />
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="PinnedWindow.h" />
     <QtMoc Include="MosaicTool.h" />
   </ItemGroup>
   <ItemGroup>

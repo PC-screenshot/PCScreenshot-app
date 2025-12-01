@@ -1,4 +1,4 @@
-﻿#include "ScreenshotOverlay.h"
+#include "ScreenshotOverlay.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -8,6 +8,8 @@
 #include <QClipboard>
 #include <QFileDialog>
 #include <QColorDialog>
+#include <QWheelEvent>
+#include "PinnedWindow.h"
 
 class MosaicBlurController;
 extern MosaicBlurController* g_mosaicBlurController;
@@ -58,17 +60,19 @@ void ScreenshotOverlay::paintEvent(QPaintEvent* /*event*/) {
 
     // 绘制选区内容和边框
     if (!selection_.isNull()) {
+        painter.save();
+        QRect target = selection_;
         if (stage_ == Stage::kEditing && !canvas_.isNull()) {
-            // 编辑阶段：把画布画到选区位置
-            painter.drawPixmap(selection_.topLeft(), canvas_);
-        }
-        else {
-            // 选区阶段：仅显示原始内容
+            QRect src = ComputeZoomSourceRect(canvas_.size());
+            painter.drawPixmap(target, canvas_, src);
+        } else {
             if (!background_.isNull()) {
                 QPixmap sub = background_.copy(selection_);
-                painter.drawPixmap(selection_.topLeft(), sub);
+                QRect src = ComputeZoomSourceRect(sub.size());
+                painter.drawPixmap(target, sub, src);
             }
         }
+        painter.restore();
 
         // 选区边框
         painter.setPen(QPen(Qt::blue, 2));
@@ -164,9 +168,10 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
                 toolbar_->hide();
             }
             else {
-                // 拉出一个新的有效选区：显示工具栏
                 toolbar_->show();
                 UpdateToolbarPosition();
+                zoom_scale_ = 1.0;
+                zoom_center_ = QPointF(selection_.width() / 2.0, selection_.height() / 2.0);
             }
         }
 
@@ -174,9 +179,9 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
             is_moving_ = false;
 
             if (!selection_.isNull()) {
-                // 移动结束：重新显示工具栏，并根据新的选区位置摆放
                 toolbar_->show();
                 UpdateToolbarPosition();
+                zoom_center_ = QPointF(selection_.width() / 2.0, selection_.height() / 2.0);
             }
         }
 
@@ -238,6 +243,43 @@ void ScreenshotOverlay::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         close();
     }
+}
+
+void ScreenshotOverlay::wheelEvent(QWheelEvent* event) {
+    if (selection_.isNull()) {
+        return;
+    }
+    const int delta = event->angleDelta().y();
+    if (delta == 0) return;
+    QPoint p = event->position().toPoint();
+    if (selection_.contains(p)) {
+        QPoint local = p - selection_.topLeft();
+        zoom_center_ = QPointF(local);
+    }
+    double factor = (delta > 0) ? 1.1 : 0.9;
+    zoom_scale_ *= factor;
+    if (zoom_scale_ < 0.2) zoom_scale_ = 0.2;
+    if (zoom_scale_ > 8.0) zoom_scale_ = 8.0;
+    update();
+}
+
+QRect ScreenshotOverlay::ComputeZoomSourceRect(const QSize& content_size) const {
+    if (content_size.isEmpty()) return QRect();
+    double w = content_size.width() / zoom_scale_;
+    double h = content_size.height() / zoom_scale_;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    QPointF center = zoom_center_;
+    if (center.isNull()) {
+        center = QPointF(content_size.width() / 2.0, content_size.height() / 2.0);
+    }
+    double x = center.x() - w / 2.0;
+    double y = center.y() - h / 2.0;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x + w > content_size.width()) x = content_size.width() - w;
+    if (y + h > content_size.height()) y = content_size.height() - h;
+    return QRect(int(x), int(y), int(w), int(h));
 }
 
 void ScreenshotOverlay::resizeEvent(QResizeEvent* event) {
@@ -352,7 +394,7 @@ void ScreenshotOverlay::PinToDesktop() {
     if (result.isNull()) {
         return;
     }
-    // TODO: 创建一个无边框、置顶的小窗口显示 result，相当于“贴在桌面”
+    PinnedWindow::Pinned(result, nullptr);
 }
 
 void ScreenshotOverlay::Undo() {
