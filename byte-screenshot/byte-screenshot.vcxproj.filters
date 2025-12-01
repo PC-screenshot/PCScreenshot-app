@@ -49,6 +49,12 @@
     <ClCompile Include="EditorToolbar.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MosaicTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="BlurTool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="MainWindow.h">
@@ -58,6 +64,12 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="EditorToolbar.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="MosaicTool.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="BlurTool.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

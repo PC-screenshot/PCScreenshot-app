@@ -92,7 +92,9 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BlurTool.cpp" />
     <ClCompile Include="EditorToolbar.cpp" />
+    <ClCompile Include="MosaicTool.cpp" />
     <ClCompile Include="ScreenshotOverlay.cpp" />
     <QtRcc Include="bytescreenshot.qrc" />
     <QtUic Include="bytescreenshot.ui" />
@@ -109,6 +111,12 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="EditorToolbar.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="MosaicTool.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="BlurTool.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
