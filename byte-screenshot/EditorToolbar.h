@@ -2,14 +2,12 @@
 
 #include <QWidget>
 #include <QVector>
-
 class QToolButton;
-
+class SecondaryToolBar;
 class EditorToolbar : public QWidget {
   Q_OBJECT
 
  public:
-  // 后续如果你要加 AI 工具、长截图等，都在这里扩展
   enum class Tool {
     kMove,
     kColor,       // 颜色选择按钮（后期弹 QColorDialog）
@@ -30,7 +28,6 @@ class EditorToolbar : public QWidget {
     kUndo,
     kRedo,
     kSave,
-    kCopy,
     kCancel,
     kDone,
   };

@@ -3,29 +3,51 @@
 #include <QWidget>
 #include <QPixmap>
 #include <QWheelEvent>
+#include <QToolButton>
+#include <QPushButton>
 
 class PinnedWindow : public QWidget {
-  Q_OBJECT
+	Q_OBJECT
 
- public:
-  explicit PinnedWindow(const QPixmap& pixmap, QWidget* parent = nullptr);
+public:
+	explicit PinnedWindow(const QPixmap& pixmap, QWidget* parent = nullptr);
 
-  static void Pinned(const QPixmap& pixmap, QWidget* parent = nullptr);
+	static void Pinned(const QPixmap& pixmap, QWidget* parent = nullptr);
 
-  protected:
-  void paintEvent(QPaintEvent* event) override;
-  void mousePressEvent(QMouseEvent* event) override;
-  void mouseMoveEvent(QMouseEvent* event) override;
-  void mouseReleaseEvent(QMouseEvent* event) override;
-  void mouseDoubleClickEvent(QMouseEvent* event) override;
-  void resizeEvent(QResizeEvent* event) override;
-  void keyPressEvent(QKeyEvent* event) override;
-  void wheelEvent(QWheelEvent* event) override;
+protected:
+	void paintEvent(QPaintEvent* event) override;
+	void mousePressEvent(QMouseEvent* event) override;
+	void mouseMoveEvent(QMouseEvent* event) override;
+	void mouseReleaseEvent(QMouseEvent* event) override;
+	void resizeEvent(QResizeEvent* event) override;
+	void moveEvent(QMoveEvent* event) override;
+	void keyPressEvent(QKeyEvent* event) override;
+	void wheelEvent(QWheelEvent* event) override;
+	void enterEvent(QEnterEvent* event) override;
+	void leaveEvent(QEvent* event) override;
+	bool eventFilter(QObject* watched, QEvent* event) override;
 
- private:
-  QPixmap pixmap_;
-  QPoint drag_offset_;
-  bool dragging_ = false;
-  double zoom_scale_ = 1.0;
+private slots:
+	void OnCopy();
+	void OnSave();
+	void OnTogglePin();
+
+private:
+	void SetupUi();
+	void UpdatePinButtonState();
+	void UpdateToolbarPosition();
+	void CheckHideUi();
+
+	QPixmap pixmap_;
+	QPoint drag_offset_;
+	bool dragging_ = false;
+
+	// UI Elements
+	QPushButton* close_btn_ = nullptr;
+	QWidget* tool_bar_ = nullptr;
+	QToolButton* btn_copy_ = nullptr;
+	QToolButton* btn_save_ = nullptr;
+	QToolButton* btn_pin_ = nullptr;
+
+	bool is_pinned_ = true;
 };
-

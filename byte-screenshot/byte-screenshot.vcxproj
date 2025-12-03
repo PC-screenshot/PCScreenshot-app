@@ -37,7 +37,7 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtInstall>6.9.3_msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets</QtModules>
+    <QtModules>core;gui;network;widgets</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
@@ -63,6 +63,11 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
     <ClCompile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -92,11 +97,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AiDescribeDialog.cpp" />
     <ClCompile Include="BlurTool.cpp" />
     <ClCompile Include="EditorToolbar.cpp" />
     <ClCompile Include="PinnedWindow.cpp" />
     <ClCompile Include="MosaicTool.cpp" />
+    <ClCompile Include="RegionMagnifier.cpp" />
     <ClCompile Include="ScreenshotOverlay.cpp" />
+    <ClCompile Include="SecondaryToolBar.cpp" />
+    <ClCompile Include="uiinspector.cpp" />
     <QtRcc Include="bytescreenshot.qrc" />
     <QtUic Include="bytescreenshot.ui" />
     <QtMoc Include="ScreenCaptureManager.h" />
@@ -119,6 +128,12 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="BlurTool.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="AiDescribeDialog.h" />
+    <ClInclude Include="RegionMagnifier.h" />
+    <QtMoc Include="SecondaryToolBar.h" />
+    <ClInclude Include="uiinspector.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

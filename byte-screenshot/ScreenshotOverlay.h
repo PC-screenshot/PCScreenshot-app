@@ -6,14 +6,21 @@
 #include <QVector>
 #include <QColor>
 #include <QPointF>
-class QWheelEvent;
 
+#include "AiDescribeDialog.h"
 #include "EditorToolbar.h"
-
 #include "MosaicTool.h"
 #include "BlurTool.h"
+#include "RegionMagnifier.h"
+#include "SecondaryToolBar.h"
 
-// 截图覆盖层：负责选区 + 编辑 + 工具栏 + 导出
+class QWheelEvent;
+
+#ifdef Q_OS_WIN
+#include "uiinspector.h"
+#endif
+
+// 截图覆盖层：负责选区 + 编辑 + 工具栏 + 导出 + 放大镜 + 自动窗口高亮
 class ScreenshotOverlay : public QWidget {
     Q_OBJECT
 
@@ -52,11 +59,14 @@ private:
         kArrow,
         kMosaic,
         kBlur,
-        // 以后可以追加 Pen / Text 等
+        kPen,      // 新增：画笔
+        kEraser,   // 新增：橡皮擦
+        // 以后可以追加 Text 等
     };
 
     bool InsideSelection(const QPoint& pos) const;
     void UpdateToolbarPosition();
+    void UpdateSecondaryToolbarPosition();
     void OnToolSelected(EditorToolbar::Tool tool);
 
     void StartEditingIfNeeded();
@@ -68,24 +78,27 @@ private:
     void CopyResultToClipboard();
     void SaveToFile();
     void RunAiOcr();       // TODO: 打开 AI-OCR 窗口
-    void RunAiDescribe();  // TODO: 打开 AI 描述窗口
-    void PinToDesktop();   // TODO: 固定到桌面
+    void RunAiDescribe();  // 打开 AI 描述窗口
+    void PinToDesktop();   // 固定到桌面
 
     // 撤销 / 重做
     void Undo();
     void Redo();
 
+    QRect ComputeZoomSourceRect(const QSize& content_size) const;
+    void showToolPopup(QWidget* popup);
+
     // ---------- 成员变量 ----------
 
-    Stage stage_ = Stage::kSelecting;
+    Stage    stage_ = Stage::kSelecting;
     DrawMode draw_mode_ = DrawMode::kNone;
 
     QPixmap background_;   // 整个屏幕截图
     QRect   selection_;    // 当前选区
     QPixmap canvas_;       // 选区内部绘制用的画布
-    double zoom_scale_ = 1.0; // 选区内容缩放比例
+
+    double  zoom_scale_ = 1.0; // 选区内容缩放比例
     QPointF zoom_center_;
-    QRect ComputeZoomSourceRect(const QSize& content_size) const;
 
     bool is_selecting_ = false;
     bool is_moving_ = false;
@@ -96,21 +109,33 @@ private:
     QPoint edit_start_pos_;    // 编辑起点（画布坐标）
     QPoint edit_current_pos_;  // 编辑当前点（画布坐标）
 
-    QColor current_color_ = QColor(255, 80, 80);  // 默认画笔颜色
+    QColor current_color_ = QColor(255, 80, 80);  // 默认画笔/形状颜色
+    int    stroke_width_ = 4;                    // 形状/画笔/橡皮擦的粗细
+    // 画笔 / 橡皮参数
 
     // 撤销 / 重做栈，存画布的快照
     QVector<QImage> undo_stack_;
     QVector<QImage> redo_stack_;
 
-    EditorToolbar* toolbar_ = nullptr;
+    EditorToolbar* toolbar_ = nullptr;  // 顶部主工具栏
+    SecondaryToolBar* sToolbar_ = nullptr;  // 形状/画笔/橡皮擦二级工具栏
 
     // 工具实例
-    MosaicTool* mosaicTool_;
-    BlurTool* blurTool_;
+    MosaicTool* mosaicTool_ = nullptr;
+    BlurTool* blurTool_ = nullptr;
 
-    // 二级设置栏
-    QWidget* mosaicPopup_;
-    QWidget* blurPopup_;
+    // 二级设置栏（马赛克 / 模糊）
+    QWidget* mosaicPopup_ = nullptr;
+    QWidget* blurPopup_ = nullptr;
 
-    void showToolPopup(QWidget* popup);
+    // 放大镜
+    QPoint          cursor_pos_;   // 当前鼠标位置（widget 坐标）
+    RegionMagnifier magnifier_;
+
+#ifdef Q_OS_WIN
+    // 自动窗口 / 控件识别（Hover 高亮）
+    UIInspector ui_inspector_;
+    QRect       hover_rect_;      // 高亮区域（widget 坐标）
+    bool        hover_valid_ = false;
+#endif
 };

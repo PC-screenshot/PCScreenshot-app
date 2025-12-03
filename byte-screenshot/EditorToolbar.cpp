@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QFrame>
 #include <QPainter>
+#include <QVariant>
 
 namespace {
 
@@ -12,35 +13,39 @@ namespace {
         EditorToolbar::Tool tool;
         const char* text;
         bool checkable;
-        int group;                // 用于插入分隔线
-        const char* icon_path;    // 未来可以用 QIcon 替代文字
+        int group;              // 用于插入分隔线
+        const char* icon_path;  // 未来可以用 QIcon 替代文字
     };
 
-    // 为了简写
     using Tool = EditorToolbar::Tool;
 
     // 这里定义工具栏按钮顺序和分组
+    // group: 0 = 绘图相关, 1 = AI / 长截图 / Pin, 2 = 保存/取消/完成
     const ToolConfig kToolConfigs[] = {
-        {Tool::kColor,      "Color",  false, 0, ""},  //颜色按钮，矩形框、椭圆框、箭头的颜色
-        {Tool::kRect,       "Rect",   true,  0, ""},//矩形框
-        {Tool::kEllipse,    "Ellipse",true,  0, ""},//椭圆框
-        {Tool::kArrow,      "Arrow",  true,  0, ""},//箭头
-		{Tool::kMosaic,     "Mosaic", true,  0, ""},//马赛克，也能选择强度
-        {Tool::kBlur,       "Blur",   true,  0, ""},//高斯模糊，能选择强度
-		{Tool::kUndo,       "Undo",   false, 0, ""},//撤销
-		{Tool::kRedo,       "Redo",   false, 0, ""},//重做
+        {Tool::kRect,       "Rect",    true,  0, ""},  // 矩形
+        {Tool::kEllipse,    "Ellipse", true,  0, ""},  // 椭圆
+        {Tool::kArrow,      "Arrow",   true,  0, ""},  // 箭头
+        {Tool::kPen,        "Pen",     true,  0, ""},  // 画笔
+        {Tool::kEraser,     "Eraser",  true,  0, ""},  // 橡皮擦
 
-		{Tool::kAiOcr,      "AI-OCR", false, 1, ""},//AI文字识别
-		{Tool::kAiDescribe, "AI-Desc",false, 1, ""},//AI描述
-        {Tool::kLongShot,   "Scroll", false, 1, ""},//长截图
-		{Tool::kPin,        "Pin",    false, 1, ""},//固定截图窗口
+        {Tool::kMosaic,     "Mosaic",  true,  0, ""},  // 马赛克（强度在单独 popup 调）
 
-		{Tool::kSave,       "Save",   false, 2, ""},//保存到文件
-		{Tool::kCancel,     "Cancel", false, 2, ""},//取消截图和编辑
-		{Tool::kDone,       "Done",   false, 2, ""},//完成截图和编辑，复制到剪切板
+        {Tool::kBlur,       "Blur",    true,  0, ""},  // 模糊（强度在单独 popup 调）
+
+        {Tool::kUndo,       "Undo",    false, 0, ""},  // 撤销
+        {Tool::kRedo,       "Redo",    false, 0, ""},  // 重做
+
+        {Tool::kAiOcr,      "AI-OCR",  false, 1, ""},  // AI 文字识别
+        {Tool::kAiDescribe, "AI-Desc", false, 1, ""},  // AI 描述图片
+        {Tool::kLongShot,   "Scroll",  false, 1, ""},  // 长截图
+        {Tool::kPin,        "Pin",     false, 1, ""},  // Pin 到桌面
+
+        {Tool::kSave,       "Save",    false, 2, ""},  // 保存到文件
+        {Tool::kCancel,     "Cancel",  false, 2, ""},  // 取消截图和编辑
+        {Tool::kDone,       "Done",    false, 2, ""},  // 完成截图并复制
     };
 
-    // 可选中工具的样式（Rect / Arrow / Pen 等）
+    // 可选中工具的样式（Rect / Arrow / Pen / Eraser / Mosaic / Blur 等）
     const char* kSelectableButtonStyle = R"(
   QToolButton {
     color: #444444;
@@ -57,7 +62,7 @@ namespace {
   }
 )";
 
-    // 一次性动作按钮的样式（Undo / Save / Copy / AI 等）
+    // 一次性动作按钮的样式（Undo / Save / AI / Pin 等）
     const char* kActionButtonStyle = R"(
   QToolButton {
     color: #555555;
@@ -74,10 +79,8 @@ namespace {
 
 EditorToolbar::EditorToolbar(QWidget* parent)
     : QWidget(parent) {
-    //// 做成浮窗：无边框、置顶、小工具窗口
-    //setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    // 作为浮动工具条使用（父级一般是 ScreenshotOverlay）
     setAttribute(Qt::WA_TranslucentBackground);
-
     setFixedHeight(36);
 
     InitUi();
@@ -101,7 +104,9 @@ void EditorToolbar::InitUi() {
         last_group = cfg.group;
 
         QToolButton* btn =
-            CreateButton(QString::fromUtf8(cfg.text), cfg.tool, cfg.checkable,
+            CreateButton(QString::fromUtf8(cfg.text),
+                cfg.tool,
+                cfg.checkable,
                 QString::fromUtf8(cfg.icon_path));
 
         layout->addWidget(btn);
@@ -115,7 +120,7 @@ QToolButton* EditorToolbar::CreateButton(const QString& text,
     const QString& icon_path) {
     auto* button = new QToolButton(this);
 
-    // 先用纯英文文字，后面根据 icon_path 换成 QIcon
+    // 先用纯文字，后面可以根据 icon_path 换成图标
     button->setText(text);
     button->setToolTip(text);
     button->setFixedSize(60, 28);
@@ -125,7 +130,6 @@ QToolButton* EditorToolbar::CreateButton(const QString& text,
 
     if (checkable) {
         button->setCheckable(true);
-        // 初始选中 Move 工具
         if (tool == current_tool_) {
             button->setChecked(true);
         }
@@ -135,18 +139,19 @@ QToolButton* EditorToolbar::CreateButton(const QString& text,
         button->setStyleSheet(QString::fromUtf8(kActionButtonStyle));
     }
 
-    // 之后要用图片，可以在这里判断 icon_path 是否为空：
+    // 将来如果使用图标：
     // if (!icon_path.isEmpty()) {
-    //   button->setIcon(QIcon(icon_path));
-    //   button->setText(QString());  // 不再显示文字
+    //     button->setIcon(QIcon(icon_path));
+    //     button->setText(QString());
     // }
 
     // 点击逻辑：如果是模式工具 -> 更新当前工具；所有工具 -> 发信号
-    connect(button, &QToolButton::clicked, this, [this, tool, checkable]() {
-        if (checkable) {
-            SetCurrentTool(tool);
-        }
-        emit ToolSelected(tool);
+    connect(button, &QToolButton::clicked, this,
+        [this, tool, checkable]() {
+            if (checkable) {
+                SetCurrentTool(tool);
+            }
+            emit ToolSelected(tool);
         });
 
     return button;
@@ -188,4 +193,3 @@ void EditorToolbar::paintEvent(QPaintEvent* event) {
     painter.setBrush(Qt::NoBrush);
     painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 6, 6);
 }
-
