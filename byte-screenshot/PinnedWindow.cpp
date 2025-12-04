@@ -1,7 +1,10 @@
 #include "PinnedWindow.h"
+#include "OCR.h"
+#include "OcrResultDialog.h"
 
 #include <QMouseEvent>
 #include <QMoveEvent>
+#include <QCloseEvent>
 #include <QPainter>
 #include <QStyle>
 #include <QWheelEvent>
@@ -11,6 +14,10 @@
 #include <QHBoxLayout>
 #include <QApplication>
 #include <QTimer>
+#include <QPointer>
+#include <QDialog>
+#include <QTextEdit>
+#include <QVBoxLayout>
 
 namespace {
     // 复制自 EditorToolbar.cpp
@@ -107,6 +114,18 @@ void PinnedWindow::SetupUi() {
   connect(btn_save_, &QToolButton::clicked, this, &PinnedWindow::OnSave);
   layout->addWidget(btn_save_);
 
+  // OCR 按钮
+  btn_ocr_ = new QToolButton(tool_bar_);
+  btn_ocr_->setText("OCR");
+  btn_ocr_->setToolTip("Extract Text");
+  btn_ocr_->setFixedSize(60, 28);
+  btn_ocr_->setAutoRaise(true);
+  btn_ocr_->setStyleSheet(kActionButtonStyle);
+  connect(btn_ocr_, &QToolButton::clicked, this, &PinnedWindow::OnOcr);
+  layout->addWidget(btn_ocr_);
+  // 默认隐藏，由外部控制开启，或者默认开启
+  btn_ocr_->hide(); 
+
   // Pin 按钮 (切换置顶)
   btn_pin_ = new QToolButton(tool_bar_);
   btn_pin_->setText("Pin"); // 初始文字
@@ -141,6 +160,11 @@ void PinnedWindow::resizeEvent(QResizeEvent* event) {
   UpdateToolbarPosition();
 }
 
+void PinnedWindow::closeEvent(QCloseEvent* event) {
+    emit windowClosed();
+    QWidget::closeEvent(event);
+}
+
 void PinnedWindow::paintEvent(QPaintEvent* /*event*/) {
   QPainter p(this);
   p.setRenderHint(QPainter::SmoothPixmapTransform, true);
@@ -150,7 +174,7 @@ void PinnedWindow::paintEvent(QPaintEvent* /*event*/) {
     p.drawPixmap(rect(), pixmap_);
   }
 
-  // 绘制细边框，增强无边框模式下的边界感
+  // 绘制细边框
   p.setPen(QPen(QColor(0, 0, 0, 50), 1));
   p.drawRect(rect().adjusted(0, 0, -1, -1));
 }
@@ -182,13 +206,14 @@ void PinnedWindow::mouseReleaseEvent(QMouseEvent* event) {
   }
 }
 
-void PinnedWindow::Pinned(const QPixmap& pixmap, QWidget* parent) {
+PinnedWindow* PinnedWindow::CreatePinnedWindow(const QPixmap& pixmap, QWidget* parent) {
   if (pixmap.isNull()) {
-    return;
+    return nullptr;
   }
   auto* w = new PinnedWindow(pixmap, parent);
   w->show();
   w->raise();
+  return w;
 }
 
 void PinnedWindow::keyPressEvent(QKeyEvent* event) {
@@ -218,8 +243,13 @@ void PinnedWindow::wheelEvent(QWheelEvent* event) {
   // 计算新尺寸
   QSize new_size = size() * factor;
   
-  // 简单的最小尺寸限制
-  if (new_size.width() < 100 || new_size.height() < 100) {
+  // 最小尺寸限制
+  if (new_size.width() < 50 || new_size.height() < 50) {
+      return;
+  }
+
+  // 最大尺寸限制 (防止过大)
+  if (new_size.width() > 5000 || new_size.height() > 5000) {
       return;
   }
   
@@ -315,6 +345,48 @@ void PinnedWindow::OnSave() {
 void PinnedWindow::OnTogglePin() {
     is_pinned_ = !is_pinned_;
     UpdatePinButtonState();
+}
+
+void PinnedWindow::OnOcr() {
+    auto* engine = &OcrEngine::instance();
+    
+    // 创建对话框并显示（非模态，允许用户继续操作其他窗口）
+    // 初始状态下文本可能为空，等待 OCR 结果
+    auto* dlg = new OcrResultDialog(pixmap_, "Recognizing...", nullptr);
+    dlg->show();
+    dlg->raise();
+
+    // 使用 QPointer 确保安全访问
+    QPointer<OcrResultDialog> safeDlg(dlg);
+
+    // 延迟执行 OCR，确保对话框先显示出来
+    QTimer::singleShot(100, [engine, safeDlg, this]() {
+        // 如果对话框在 OCR 开始前被关闭，则不再继续
+        if (!safeDlg) return;
+
+        QString result;
+        try {
+            // 同步调用 OCR (会阻塞 UI 线程，但由于已显示 Loading 对话框，用户体验尚可)
+            result = engine->detectText(pixmap_.toImage());
+        } catch (const std::exception& e) {
+            result = QString("Error: %1").arg(e.what());
+        } catch (...) {
+            result = "Unknown Error during OCR dispatch.";
+        }
+
+        if (safeDlg) {
+            safeDlg->SetResultText(result);
+        }
+    });
+}
+
+void PinnedWindow::setOcrEnabled(bool enabled) {
+    if (btn_ocr_) {
+        btn_ocr_->setVisible(enabled);
+        if (tool_bar_) {
+            tool_bar_->adjustSize();
+        }
+    }
 }
 
 void PinnedWindow::UpdatePinButtonState() {

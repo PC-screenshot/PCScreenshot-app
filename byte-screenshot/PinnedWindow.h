@@ -12,9 +12,20 @@ class PinnedWindow : public QWidget {
  public:
   explicit PinnedWindow(const QPixmap& pixmap, QWidget* parent = nullptr);
 
-  static void Pinned(const QPixmap& pixmap, QWidget* parent = nullptr);
+  static PinnedWindow* CreatePinnedWindow(const QPixmap& pixmap, QWidget* parent = nullptr);
 
-  protected:
+  // 设置是否启用 OCR 按钮
+  void setOcrEnabled(bool enabled);
+
+ signals:
+  // 触发 OCR 请求，将当前图片传递出去
+  void ocrTriggered(const QPixmap& image);
+  
+  // 窗口关闭信号
+  void windowClosed();
+
+ protected:
+  void closeEvent(QCloseEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
@@ -30,6 +41,7 @@ class PinnedWindow : public QWidget {
  private slots:
   void OnCopy();
   void OnSave();
+  void OnOcr();
   void OnTogglePin();
 
  private:
@@ -47,6 +59,7 @@ class PinnedWindow : public QWidget {
   QWidget* tool_bar_ = nullptr;
   QToolButton* btn_copy_ = nullptr;
   QToolButton* btn_save_ = nullptr;
+  QToolButton* btn_ocr_ = nullptr;
   QToolButton* btn_pin_ = nullptr;
 
   bool is_pinned_ = true;

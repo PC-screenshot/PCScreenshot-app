@@ -7,40 +7,42 @@
 
 namespace {
 
-    // ÅäÖÃÃ¿¸ö¹¤¾ß£ºÀàĞÍ¡¢ÏÔÊ¾ÎÄ×Ö¡¢ÊÇ·ñ¿ÉÑ¡ÖĞ¡¢·Ö×é id¡¢Î´À´Í¼±êÂ·¾¶
+    // é…ç½®æ¯ä¸ªå·¥å…·ï¼šç±»å‹ã€æ˜¾ç¤ºæ–‡å­—ã€æ˜¯å¦å¯é€‰ä¸­ã€åˆ†ç»„ idã€æœªæ¥å›¾æ ‡è·¯å¾„
     struct ToolConfig {
         EditorToolbar::Tool tool;
         const char* text;
         bool checkable;
-        int group;                // ÓÃÓÚ²åÈë·Ö¸ôÏß
-        const char* icon_path;    // Î´À´¿ÉÒÔÓÃ QIcon Ìæ´úÎÄ×Ö
+        int group;                // ç”¨äºæ’å…¥åˆ†éš”çº¿
+        const char* icon_path;    // æœªæ¥å¯ä»¥ç”¨ QIcon æ›¿ä»£æ–‡å­—
     };
 
-    // ÎªÁË¼òĞ´
+    // ä¸ºäº†ç®€å†™
     using Tool = EditorToolbar::Tool;
 
-    // ÕâÀï¶¨Òå¹¤¾ßÀ¸°´Å¥Ë³ĞòºÍ·Ö×é
+    // è¿™é‡Œå®šä¹‰å·¥å…·æ æŒ‰é’®é¡ºåºå’Œåˆ†ç»„
     const ToolConfig kToolConfigs[] = {
-        {Tool::kColor,      "Color",  false, 0, ""},  //ÑÕÉ«°´Å¥£¬¾ØĞÎ¿ò¡¢ÍÖÔ²¿ò¡¢¼ıÍ·µÄÑÕÉ«
-        {Tool::kRect,       "Rect",   true,  0, ""},//¾ØĞÎ¿ò
-        {Tool::kEllipse,    "Ellipse",true,  0, ""},//ÍÖÔ²¿ò
-        {Tool::kArrow,      "Arrow",  true,  0, ""},//¼ıÍ·
-		{Tool::kMosaic,     "Mosaic", true,  0, ""},//ÂíÈü¿Ë£¬Ò²ÄÜÑ¡ÔñÇ¿¶È
-        {Tool::kBlur,       "Blur",   true,  0, ""},//¸ßË¹Ä£ºı£¬ÄÜÑ¡ÔñÇ¿¶È
-		{Tool::kUndo,       "Undo",   false, 0, ""},//³·Ïú
-		{Tool::kRedo,       "Redo",   false, 0, ""},//ÖØ×ö
+        {Tool::kColor,      "Color",  false, 0, ""},//é¢œè‰²æŒ‰é’®ï¼ŒçŸ©å½¢æ¡†ã€æ¤­åœ†æ¡†ã€ç®­å¤´çš„é¢œè‰²
+        {Tool::kRect,       "Rect",   true,  0, ""},//çŸ©å½¢æ¡†
+        {Tool::kEllipse,    "Ellipse",true,  0, ""},//æ¤­åœ†æ¡†
+        {Tool::kArrow,      "Arrow",  true,  0, ""},//ç®­å¤´
+		{Tool::kMosaic,     "Mosaic", true,  0, ""},//é©¬èµ›å…‹ï¼Œä¹Ÿèƒ½é€‰æ‹©å¼ºåº¦
+        {Tool::kBlur,       "Blur",   true,  0, ""},//é«˜æ–¯æ¨¡ç³Šï¼Œèƒ½é€‰æ‹©å¼ºåº¦
+		{Tool::kUndo,       "Undo",   false, 0, ""},//æ’¤é”€
+		{Tool::kRedo,       "Redo",   false, 0, ""},//é‡åš
 
-		{Tool::kAiOcr,      "AI-OCR", false, 1, ""},//AIÎÄ×ÖÊ¶±ğ
-		{Tool::kAiDescribe, "AI-Desc",false, 1, ""},//AIÃèÊö
-        {Tool::kLongShot,   "Scroll", false, 1, ""},//³¤½ØÍ¼
-		{Tool::kPin,        "Pin",    false, 1, ""},//¹Ì¶¨½ØÍ¼´°¿Ú
+		{Tool::kAiOcr,      "AI-OCR", false, 1, ""},//AIæ–‡å­—è¯†åˆ«
+		{Tool::kAiDescribe, "AI-Desc",false, 1, ""},//AIæè¿°
+        {Tool::kLongShot,   "Scroll", false, 1, ""},//é•¿æˆªå›¾
+		{Tool::kPin,        "Pin",    false, 1, ""},//å›ºå®šæˆªå›¾çª—å£
+        {Tool::kOcr,        "OCR",    false, 1, ""},//OCRè¯†åˆ«
 
-		{Tool::kSave,       "Save",   false, 2, ""},//±£´æµ½ÎÄ¼ş
-		{Tool::kCancel,     "Cancel", false, 2, ""},//È¡Ïû½ØÍ¼ºÍ±à¼­
-		{Tool::kDone,       "Done",   false, 2, ""},//Íê³É½ØÍ¼ºÍ±à¼­£¬¸´ÖÆµ½¼ôÇĞ°å
+		{Tool::kSave,       "Save",   false, 2, ""},//ä¿å­˜åˆ°æ–‡ä»¶
+		{Tool::kCancel,     "Cancel", false, 2, ""},//å–æ¶ˆæˆªå›¾å’Œç¼–è¾‘
+		{Tool::kDone,       "Done",   false, 2, ""},//å®Œæˆæˆªå›¾å’Œç¼–è¾‘ï¼Œå¤åˆ¶åˆ°å‰ªåˆ‡æ¿
+
     };
 
-    // ¿ÉÑ¡ÖĞ¹¤¾ßµÄÑùÊ½£¨Rect / Arrow / Pen µÈ£©
+    // å¯é€‰ä¸­å·¥å…·çš„æ ·å¼ï¼ˆRect / Arrow / Pen ç­‰ï¼‰
     const char* kSelectableButtonStyle = R"(
   QToolButton {
     color: #444444;
@@ -57,7 +59,7 @@ namespace {
   }
 )";
 
-    // Ò»´ÎĞÔ¶¯×÷°´Å¥µÄÑùÊ½£¨Undo / Save / Copy / AI µÈ£©
+    // ä¸€æ¬¡æ€§åŠ¨ä½œæŒ‰é’®çš„æ ·å¼ï¼ˆUndo / Save / Copy / AI ç­‰ï¼‰
     const char* kActionButtonStyle = R"(
   QToolButton {
     color: #555555;
@@ -74,7 +76,7 @@ namespace {
 
 EditorToolbar::EditorToolbar(QWidget* parent)
     : QWidget(parent) {
-    //// ×ö³É¸¡´°£ºÎŞ±ß¿ò¡¢ÖÃ¶¥¡¢Ğ¡¹¤¾ß´°¿Ú
+    //// åšæˆæµ®çª—ï¼šæ— è¾¹æ¡†ã€ç½®é¡¶ã€å°å·¥å…·çª—å£
     //setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground);
 
@@ -92,7 +94,7 @@ void EditorToolbar::InitUi() {
 
     for (const ToolConfig& cfg : kToolConfigs) {
         if (last_group != -1 && cfg.group != last_group) {
-            // ·Ö×é±ä»¯Ê±²åÈëÒ»ÌõÊúÖ±·Ö¸ôÏß
+            // åˆ†ç»„å˜åŒ–æ—¶æ’å…¥ä¸€æ¡ç«–ç›´åˆ†éš”çº¿
             auto* separator = new QFrame(this);
             separator->setFrameShape(QFrame::VLine);
             separator->setFrameShadow(QFrame::Sunken);
@@ -115,7 +117,7 @@ QToolButton* EditorToolbar::CreateButton(const QString& text,
     const QString& icon_path) {
     auto* button = new QToolButton(this);
 
-    // ÏÈÓÃ´¿Ó¢ÎÄÎÄ×Ö£¬ºóÃæ¸ù¾İ icon_path »»³É QIcon
+    // å…ˆç”¨çº¯è‹±æ–‡æ–‡å­—ï¼Œåé¢æ ¹æ® icon_path æ¢æˆ QIcon
     button->setText(text);
     button->setToolTip(text);
     button->setFixedSize(60, 28);
@@ -125,7 +127,7 @@ QToolButton* EditorToolbar::CreateButton(const QString& text,
 
     if (checkable) {
         button->setCheckable(true);
-        // ³õÊ¼Ñ¡ÖĞ Move ¹¤¾ß
+        // åˆå§‹é€‰ä¸­ Move å·¥å…·
         if (tool == current_tool_) {
             button->setChecked(true);
         }
@@ -135,13 +137,13 @@ QToolButton* EditorToolbar::CreateButton(const QString& text,
         button->setStyleSheet(QString::fromUtf8(kActionButtonStyle));
     }
 
-    // Ö®ºóÒªÓÃÍ¼Æ¬£¬¿ÉÒÔÔÚÕâÀïÅĞ¶Ï icon_path ÊÇ·ñÎª¿Õ£º
+    // ä¹‹åè¦ç”¨å›¾ç‰‡ï¼Œå¯ä»¥åœ¨è¿™é‡Œåˆ¤æ–­ icon_path æ˜¯å¦ä¸ºç©ºï¼š
     // if (!icon_path.isEmpty()) {
     //   button->setIcon(QIcon(icon_path));
-    //   button->setText(QString());  // ²»ÔÙÏÔÊ¾ÎÄ×Ö
+    //   button->setText(QString());  // ä¸å†æ˜¾ç¤ºæ–‡å­—
     // }
 
-    // µã»÷Âß¼­£ºÈç¹ûÊÇÄ£Ê½¹¤¾ß -> ¸üĞÂµ±Ç°¹¤¾ß£»ËùÓĞ¹¤¾ß -> ·¢ĞÅºÅ
+    // ç‚¹å‡»é€»è¾‘ï¼šå¦‚æœæ˜¯æ¨¡å¼å·¥å…· -> æ›´æ–°å½“å‰å·¥å…·ï¼›æ‰€æœ‰å·¥å…· -> å‘ä¿¡å·
     connect(button, &QToolButton::clicked, this, [this, tool, checkable]() {
         if (checkable) {
             SetCurrentTool(tool);
@@ -158,7 +160,7 @@ void EditorToolbar::SetCurrentTool(Tool tool) {
     }
     current_tool_ = tool;
 
-    // ¸üĞÂËùÓĞ¿ÉÑ¡ÖĞ°´Å¥µÄ checked ×´Ì¬
+    // æ›´æ–°æ‰€æœ‰å¯é€‰ä¸­æŒ‰é’®çš„ checked çŠ¶æ€
     for (QToolButton* btn : buttons_) {
         if (!btn) continue;
         QVariant v = btn->property("tool");
@@ -178,12 +180,12 @@ void EditorToolbar::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // ±³¾°£ºÇ³»ÒÉ«Ô²½Ç¾ØĞÎ
+    // èƒŒæ™¯ï¼šæµ…ç°è‰²åœ†è§’çŸ©å½¢
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(245, 245, 245, 240));
     painter.drawRoundedRect(rect(), 6, 6);
 
-    // ±ß¿ò
+    // è¾¹æ¡†
     painter.setPen(QPen(QColor(200, 200, 200), 1));
     painter.setBrush(Qt::NoBrush);
     painter.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 6, 6);

@@ -1,4 +1,6 @@
 #include "ScreenshotOverlay.h"
+#include "OCR.h"
+#include "OcrResultDialog.h"
 
 #include <QPainter>
 #include <QMouseEvent>
@@ -9,6 +11,8 @@
 #include <QFileDialog>
 #include <QColorDialog>
 #include <QWheelEvent>
+#include <QTimer>
+#include <QPointer>
 #include "PinnedWindow.h"
 
 class MosaicBlurController;
@@ -378,7 +382,35 @@ void ScreenshotOverlay::RunAiOcr() {
     if (result.isNull()) {
         return;
     }
-    // TODO: 打开一个新窗口，左侧显示 result，右侧显示识别出的文字
+    
+    // 直接复用 OcrEngine 和 OcrResultDialog
+    auto* engine = &OcrEngine::instance();
+    
+    // 创建并显示结果对话框
+    auto* dlg = new OcrResultDialog(result, "Processing...", nullptr);
+    // 居中显示
+    dlg->move(this->geometry().center() - dlg->rect().center());
+    dlg->show();
+    
+    // 使用 QPointer
+    QPointer<OcrResultDialog> safeDlg(dlg);
+
+    QTimer::singleShot(100, [result, safeDlg, engine]() {
+        if (!safeDlg) return;
+        
+        QString text;
+        try {
+            text = engine->detectText(result.toImage());
+        } catch (const std::exception& e) {
+            text = QString("Error: %1").arg(e.what());
+        } catch (...) {
+            text = "Unknown Error";
+        }
+        
+        if (safeDlg) {
+            safeDlg->SetResultText(text);
+        }
+    });
 }
 //AI 描述
 void ScreenshotOverlay::RunAiDescribe() {
@@ -394,7 +426,10 @@ void ScreenshotOverlay::PinToDesktop() {
     if (result.isNull()) {
         return;
     }
-    PinnedWindow::Pinned(result, nullptr);
+    auto* pin = PinnedWindow::CreatePinnedWindow(result, nullptr);
+    if (pin) {
+        pin->setOcrEnabled(true);
+    }
 }
 
 void ScreenshotOverlay::Undo() {
@@ -464,13 +499,51 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
         break;
 
     case EditorToolbar::Tool::kAiOcr:
-        StartEditingIfNeeded();
-        RunAiOcr();
+         StartEditingIfNeeded();
+         RunAiOcr();
         break;
     case EditorToolbar::Tool::kAiDescribe:
-        StartEditingIfNeeded();
-        RunAiDescribe();
+         StartEditingIfNeeded();
+         RunAiDescribe();
         break;
+    case EditorToolbar::Tool::kOcr: {
+        StartEditingIfNeeded();
+        
+        QPixmap result = CurrentResultPixmap();
+        if (result.isNull()) break;
+
+        // 1. 创建并显示结果对话框 (Parent设为nullptr以独立于Overlay)
+        auto* dlg = new OcrResultDialog(result, "Recognizing...", nullptr);
+        dlg->move(this->geometry().center() - dlg->rect().center());
+        dlg->show();
+
+        // 2. 关闭截图区域
+        close();
+
+        // 3. 异步执行 OCR，避免阻塞 UI 关闭
+        // 使用 QPointer 确保安全
+        QPointer<OcrResultDialog> safeDlg(dlg);
+        
+        QTimer::singleShot(100, [result, safeDlg]() {
+            if (!safeDlg) return;
+
+            auto* engine = &OcrEngine::instance();
+            QString text;
+            try {
+                // 同步调用
+                text = engine->detectText(result.toImage());
+            } catch (const std::exception& e) {
+                text = QString("Error: %1").arg(e.what());
+            } catch (...) {
+                text = "Unknown Error during OCR dispatch.";
+            }
+            
+            if (safeDlg) {
+                safeDlg->SetResultText(text);
+            }
+        });
+        break;
+    }
 
     case EditorToolbar::Tool::kLongShot:
         // TODO: 实现长截图逻辑

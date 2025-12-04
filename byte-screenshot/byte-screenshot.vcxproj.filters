@@ -55,6 +55,54 @@
     <ClCompile Include="BlurTool.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="OCR.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PinnedWindow.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="OcrResultDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\args.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\clipper.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\ocr_cls.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\ocr_det.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\ocr_rec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\paddleocr.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\paddlestructure.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\postprocess_op.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\preprocess_op.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\structure_layout.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\structure_table.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\utility.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="MainWindow.h">
@@ -70,6 +118,15 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="BlurTool.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="PinnedWindow.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="OCR.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="OcrResultDialog.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

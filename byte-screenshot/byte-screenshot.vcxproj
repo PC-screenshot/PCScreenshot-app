@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -63,6 +63,20 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
   </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile />
+    <ClCompile>
+      <PreprocessorDefinitions>USE_PADDLE_OCR;GOOGLE_GLOG_DLL_DECL=;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\3rdparty\cpp\paddle_inference\paddle\include;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\gflags\include\;gflags;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\glog\include\\glog;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\mklml\include;$(ProjectDir)..\3rdparty\cpp\opencv\opencv\build\include;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\models\cls;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\models\det;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\models\rec;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\3rdparty\cpp\paddle_inference\paddle\lib;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\gflags\lib;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\glog\lib;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\mklml\lib;$(ProjectDir)..\3rdparty\cpp\opencv\opencv\build\x64\vc16\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>paddle_inference.lib;gflags_static.lib;glog.lib;mklml.lib;shlwapi.lib;opencv_world470d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <ProjectReference>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
     <ClCompile>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -83,17 +97,36 @@
       <ConformanceMode>true</ConformanceMode>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>USE_PADDLE_OCR;GOOGLE_GLOG_DLL_DECL=;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\3rdparty\cpp\paddle_inference\paddle\include;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\gflags\include\;gflags;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\glog\include\\glog;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\mklml\include;$(ProjectDir)..\3rdparty\cpp\opencv\opencv\build\include;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\models\cls;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\models\det;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\models\rec;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src;$(ProjectDir)..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalLibraryDirectories>$(ProjectDir)..\3rdparty\cpp\paddle_inference\paddle\lib;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\gflags\lib;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\glog\lib;$(ProjectDir)..\3rdparty\cpp\paddle_inference\third_party\install\mklml\lib;$(ProjectDir)..\3rdparty\cpp\opencv\opencv\build\x64\vc16\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>paddle_inference.lib;gflags_static.lib;glog.lib;mklml.lib;shlwapi.lib;opencv_world470.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\args.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\clipper.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\ocr_cls.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\ocr_det.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\ocr_rec.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\paddleocr.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\paddlestructure.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\postprocess_op.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\preprocess_op.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\structure_layout.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\structure_table.cpp" />
+    <ClCompile Include="..\3rdparty\cpp\2.7\PaddleOCR\deploy\cpp_infer\src\utility.cpp" />
     <ClCompile Include="BlurTool.cpp" />
     <ClCompile Include="EditorToolbar.cpp" />
+    <ClCompile Include="OCR.cpp" />
+    <ClCompile Include="OcrResultDialog.cpp" />
     <ClCompile Include="PinnedWindow.cpp" />
     <ClCompile Include="MosaicTool.cpp" />
     <ClCompile Include="ScreenshotOverlay.cpp" />
@@ -119,6 +152,12 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="BlurTool.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="OCR.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="OcrResultDialog.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

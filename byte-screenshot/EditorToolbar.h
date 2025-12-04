@@ -9,10 +9,10 @@ class EditorToolbar : public QWidget {
   Q_OBJECT
 
  public:
-  // ºóĞøÈç¹ûÄãÒª¼Ó AI ¹¤¾ß¡¢³¤½ØÍ¼µÈ£¬¶¼ÔÚÕâÀïÀ©Õ¹
+  // åç»­å¦‚æœä½ è¦åŠ  AI å·¥å…·ã€é•¿æˆªå›¾ç­‰ï¼Œéƒ½åœ¨è¿™é‡Œæ‰©å±•
   enum class Tool {
     kMove,
-    kColor,       // ÑÕÉ«Ñ¡Ôñ°´Å¥£¨ºóÆÚµ¯ QColorDialog£©
+    kColor,       // é¢œè‰²é€‰æ‹©æŒ‰é’®ï¼ˆåæœŸå¼¹ QColorDialogï¼‰
     kRect,
     kEllipse,
     kLine,
@@ -26,6 +26,7 @@ class EditorToolbar : public QWidget {
     kAiOcr,
     kAiDescribe,
     kPin,
+    kOcr,
     kLongShot,
     kUndo,
     kRedo,
@@ -41,7 +42,7 @@ class EditorToolbar : public QWidget {
   void SetCurrentTool(Tool tool);
 
  signals:
-  // Íâ²¿Ö»¹ØĞÄ¡°ÄÄ¸ö¹¤¾ß±»´¥·¢¡±£¬¾ßÌåĞĞÎªÓÉÉÏ²ã¾ö¶¨
+  // å¤–éƒ¨åªå…³å¿ƒâ€œå“ªä¸ªå·¥å…·è¢«è§¦å‘â€ï¼Œå…·ä½“è¡Œä¸ºç”±ä¸Šå±‚å†³å®š
   void ToolSelected(EditorToolbar::Tool tool);
 
  protected:
