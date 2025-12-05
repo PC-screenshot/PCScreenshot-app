@@ -68,6 +68,7 @@ private:
     void CopyResultToClipboard();
     void SaveToFile();
     void RunAiOcr();       // TODO: 打开 AI-OCR 窗口
+    void RunLocalOcr();    // 本地 PaddleOCR
     void RunAiDescribe();  // TODO: 打开 AI 描述窗口
     void PinToDesktop();   // TODO: 固定到桌面
 

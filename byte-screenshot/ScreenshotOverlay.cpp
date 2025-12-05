@@ -376,41 +376,48 @@ void ScreenshotOverlay::SaveToFile() {
 
     result.save(path);
 }
-//AI
-void ScreenshotOverlay::RunAiOcr() {
+// 本地 PaddleOCR
+void ScreenshotOverlay::RunLocalOcr() {
     QPixmap result = CurrentResultPixmap();
     if (result.isNull()) {
         return;
     }
     
-    // 直接复用 OcrEngine 和 OcrResultDialog
-    auto* engine = &OcrEngine::instance();
-    
-    // 创建并显示结果对话框
-    auto* dlg = new OcrResultDialog(result, "Processing...", nullptr);
-    // 居中显示
+    // 创建并显示结果对话框 (Parent设为nullptr以独立于Overlay)
+    auto* dlg = new OcrResultDialog(result, "Recognizing...", nullptr);
     dlg->move(this->geometry().center() - dlg->rect().center());
     dlg->show();
-    
-    // 使用 QPointer
-    QPointer<OcrResultDialog> safeDlg(dlg);
 
-    QTimer::singleShot(100, [result, safeDlg, engine]() {
+    // 关闭截图区域
+    close();
+
+    // 异步执行 OCR，避免阻塞 UI 关闭
+    // 使用 QPointer 确保安全
+    QPointer<OcrResultDialog> safeDlg(dlg);
+    
+    QTimer::singleShot(100, [result, safeDlg]() {
         if (!safeDlg) return;
         
+        auto* engine = &OcrEngine::instance();
         QString text;
         try {
+            // 同步调用
             text = engine->detectText(result.toImage());
         } catch (const std::exception& e) {
             text = QString("Error: %1").arg(e.what());
         } catch (...) {
-            text = "Unknown Error";
+            text = "Unknown Error during OCR dispatch.";
         }
         
         if (safeDlg) {
             safeDlg->SetResultText(text);
         }
     });
+}
+
+// AI OCR (预留接口)
+void ScreenshotOverlay::RunAiOcr() {
+    // TODO: 外部实现 AI OCR 接口
 }
 //AI 描述
 void ScreenshotOverlay::RunAiDescribe() {
@@ -508,40 +515,7 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
         break;
     case EditorToolbar::Tool::kOcr: {
         StartEditingIfNeeded();
-        
-        QPixmap result = CurrentResultPixmap();
-        if (result.isNull()) break;
-
-        // 1. 创建并显示结果对话框 (Parent设为nullptr以独立于Overlay)
-        auto* dlg = new OcrResultDialog(result, "Recognizing...", nullptr);
-        dlg->move(this->geometry().center() - dlg->rect().center());
-        dlg->show();
-
-        // 2. 关闭截图区域
-        close();
-
-        // 3. 异步执行 OCR，避免阻塞 UI 关闭
-        // 使用 QPointer 确保安全
-        QPointer<OcrResultDialog> safeDlg(dlg);
-        
-        QTimer::singleShot(100, [result, safeDlg]() {
-            if (!safeDlg) return;
-
-            auto* engine = &OcrEngine::instance();
-            QString text;
-            try {
-                // 同步调用
-                text = engine->detectText(result.toImage());
-            } catch (const std::exception& e) {
-                text = QString("Error: %1").arg(e.what());
-            } catch (...) {
-                text = "Unknown Error during OCR dispatch.";
-            }
-            
-            if (safeDlg) {
-                safeDlg->SetResultText(text);
-            }
-        });
+        RunLocalOcr();
         break;
     }
 
