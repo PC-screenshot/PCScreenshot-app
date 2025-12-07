@@ -3,16 +3,6 @@
 #include <QDir>
 #include <QCoreApplication>
 
-// ==========================================================================
-// 用户指南：
-// 1. 确保已安装 OpenCV (推荐 4.x) 和 PaddleOCR C++ Inference 库 (2.x)
-// 2. 在项目属性中配置好 Include 路径和 Lib 路径
-// 3. 确保 paddle_inference.dll, opencv_world.dll 等动态库在运行目录下
-// ==========================================================================
-
-// 为了保证代码在没有配置好环境时也能编译（只是功能不可用），
-// 这里使用了宏开关。正式使用时请在项目设置中定义 USE_PADDLE_OCR，
-// 或者直接取消下面这行的注释：
 // #define USE_PADDLE_OCR
 
 #ifdef USE_PADDLE_OCR
@@ -21,7 +11,6 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <paddle_inference_api.h>
 
-// 用户环境已包含官方 Demo 的封装文件
 #include "paddleocr.h"
 #include "args.h"
 
@@ -48,13 +37,32 @@ public:
         QString baseDir;
         QString dictPath;
 
+        qDebug() << "OCR Init: Checking user model dir:" << userModelDir;
+
         // 路径搜索逻辑：
         // 1. 优先检查传入的 userModelDir (通常是运行目录下的 inference)
-        if (!userModelDir.isEmpty() && QDir(userModelDir).exists()) {
-            baseDir = userModelDir;
-            // 假设字典文件在同级目录
-            if (QFile::exists(baseDir + "/ppocr_keys_v1.txt")) {
-                dictPath = baseDir + "/ppocr_keys_v1.txt";
+        if (!userModelDir.isEmpty()) {
+            QDir dir(userModelDir);
+            if (dir.exists()) {
+                // 必须包含三个模型文件夹才算有效
+                bool hasDet = dir.exists("det");
+                bool hasCls = dir.exists("cls");
+                bool hasRec = dir.exists("rec");
+
+                if (hasDet && hasCls && hasRec) {
+                    baseDir = userModelDir;
+                    
+                    // 查找字典文件：优先根目录，其次 rec 目录
+                    if (dir.exists("ppocr_keys_v1.txt")) {
+                        dictPath = dir.filePath("ppocr_keys_v1.txt");
+                    } else if (QFile::exists(dir.filePath("rec/ppocr_keys_v1.txt"))) {
+                        dictPath = dir.filePath("rec/ppocr_keys_v1.txt");
+                    } else {
+                        qDebug() << "OCR Init: Model folders found but dictionary (ppocr_keys_v1.txt) is missing in" << userModelDir;
+                    }
+                } else {
+                    qDebug() << "OCR Init: Found 'inference' dir but missing subfolders. Det:" << hasDet << " Cls:" << hasCls << " Rec:" << hasRec;
+                }
             }
         }
 
@@ -67,11 +75,17 @@ public:
             if (QDir(devPaddleRoot + "/models").exists()) {
                 baseDir = devPaddleRoot + "/models";
                 dictPath = devPaddleRoot + "/deploy/cpp_infer/ppocr_keys_v1.txt";
+                qDebug() << "OCR Init: Fallback to dev environment path:" << baseDir;
             }
         }
 
         if (baseDir.isEmpty()) {
-            qDebug() << "Error: PaddleOCR models directory not found.";
+            qDebug() << "Error: PaddleOCR models directory not found. Searched in:" << userModelDir;
+            return false;
+        }
+        
+        if (dictPath.isEmpty()) {
+            qDebug() << "Error: Dictionary file (ppocr_keys_v1.txt) not found.";
             return false;
         }
 
@@ -104,7 +118,7 @@ public:
         }
 
         FLAGS_use_gpu = false;
-        FLAGS_enable_mkldnn = false; // 禁用 MKLDNN 以避免潜在的兼容性问题
+        FLAGS_enable_mkldnn = true; // 禁用 MKLDNN 以避免潜在的兼容性问题
         FLAGS_use_angle_cls = true;
         
         // 内存优化配置
@@ -148,6 +162,7 @@ public:
         // 调用推理接口
         std::vector<OCRPredictResult> ocr_results = ocr_system_->ocr(img, true, true, true);
         
+        // 智能文本合并逻辑 (Smart Paragraph Merging) - 用户请求移除，恢复为简单换行
         QString fullText;
         for (const auto& res : ocr_results) {
             if (res.score < 0.5) continue;
@@ -213,8 +228,17 @@ QString OcrEngine::detectText(const QImage& image) {
 
     qDebug() << "OCR Start... Image Size:" << image.size();
 
+    // 图像预处理：如果图片过大，进行缩放以减少内存占用并加速推理
+    // 限制长边最大为 1600 (PaddleOCR 默认 limit_side_len=960，但在转换前缩放能减少 QImageToCvMat 的开销)
+    QImage processedImg = image;
+    int maxSide = 1600;
+    if (processedImg.width() > maxSide || processedImg.height() > maxSide) {
+        processedImg = processedImg.scaled(maxSide, maxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        qDebug() << "Image scaled to:" << processedImg.size() << "for performance optimization.";
+    }
+
     // 1. QImage -> cv::Mat
-    cv::Mat mat = QImageToCvMat(image);
+    cv::Mat mat = QImageToCvMat(processedImg);
 
     // 2. Run Inference
     QString result;
@@ -227,7 +251,7 @@ QString OcrEngine::detectText(const QImage& image) {
         if (init(defaultModelPath)) {
             result = internal_->detect(mat);
         } else {
-            result = "OCR Engine not initialized.\nPlease configure PaddleOCR models.";
+            result = "OCR Engine init failed.\nCheck ./inference folder for models and keys.";
         }
     }
 
