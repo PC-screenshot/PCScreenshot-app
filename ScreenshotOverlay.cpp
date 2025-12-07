@@ -1,5 +1,8 @@
 #include "ScreenshotOverlay.h"
-#include"ShapeDrawer.h"
+#include <QPainterPath>      // æ–°å¢ï¼šQPainterPath
+#include <algorithm>         // æ–°å¢ï¼šstd::min/std::max
+
+#include<vector>
 #include <QPainter>
 #include <QMouseEvent>
 #include <QKeyEvent>
@@ -8,110 +11,152 @@
 #include <QClipboard>
 #include <QFileDialog>
 #include <QColorDialog>
+#include <QWheelEvent>
+#include <QScreen>
+#include <QDateTime>
+#include <QStandardPaths>
+#include <QDir>
+#include <cmath>
+#include <memory>
+#include "PinnedWindow.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+class MosaicBlurController;
+extern MosaicBlurController* g_mosaicBlurController;
 
 ScreenshotOverlay::ScreenshotOverlay(QWidget* parent)
-    : QWidget(parent) {
+    : QWidget(parent)
+{
     setWindowFlags(Qt::FramelessWindowHint |
         Qt::WindowStaysOnTopHint |
         Qt::Tool);
     setWindowState(Qt::WindowFullScreen);
 
     setMouseTracking(true);
-    setFocusPolicy(Qt::StrongFocus);  // ½ÓÊÜ ESC ¼ü
+    setFocusPolicy(Qt::StrongFocus);  // æ¥å— ESC é”®
 
-    // ¹¤¾ßÀ¸×÷Îª×Ó¿Ø¼ş£¨²»ÊÇ¶¥²ã´°¿Ú£©£¬³õÊ¼Òş²Ø
+    // ä¸»å·¥å…·æ ä½œä¸ºå­æ§ä»¶ï¼ˆä¸æ˜¯é¡¶å±‚çª—å£ï¼‰ï¼Œåˆå§‹éšè—
     toolbar_ = new EditorToolbar(this);
     toolbar_->setFixedHeight(36);
     toolbar_->hide();
 
     connect(toolbar_, &EditorToolbar::ToolSelected,
         this, &ScreenshotOverlay::OnToolSelected);
+
+    // å½¢çŠ¶ / ç”»ç¬” / æ©¡çš®æ“¦ äºŒçº§å·¥å…·æ ï¼ˆç²—ç»† + é¢œè‰²ï¼‰
+    sToolbar_ = new SecondaryToolBar(this);
+    sToolbar_->hide();
+
+    connect(sToolbar_, &SecondaryToolBar::StrokeWidthChanged,
+        this, [this](int w) { stroke_width_ = w; });
+
+    connect(sToolbar_, &SecondaryToolBar::StrokeColorChanged,
+        this, [this](const QColor& c) { current_color_ = c; });
+
+    // åˆå§‹åŒ–é©¬èµ›å…‹ / æ¨¡ç³Šå·¥å…·
+    mosaicTool_ = new MosaicTool(this);
+    blurTool_ = new BlurTool(this);
+
+    // åˆ›å»ºé©¬èµ›å…‹ / æ¨¡ç³Šçš„äºŒçº§è®¾ç½®æ ï¼ˆåˆå§‹éšè—ï¼‰
+    mosaicPopup_ = mosaicTool_->createSettingsWidget(this);
+    mosaicPopup_->hide();
+
+    blurPopup_ = blurTool_->createSettingsWidget(this);
+    blurPopup_->hide();
+
+    // æ”¾å¤§é•œï¼šä½¿ç”¨æ•´å±æˆªå›¾ä½œä¸ºæº
+    magnifier_.setSourcePixmap(&background_);
+    magnifier_.setLensSize(120);  // å¯è°ƒ
+    magnifier_.setZoomFactor(4);  // å¯è°ƒ
+    magnifier_.setEnabled(true);
 }
 
-void ScreenshotOverlay::SetBackground(const QPixmap& pixmap) {
+void ScreenshotOverlay::SetBackground(const QPixmap& pixmap)
+{
     background_ = pixmap;
+    // å†åŒæ­¥ä¸€æ¬¡ï¼Œé˜²æ­¢å¤–éƒ¨åœ¨æ„é€ åæ‰è®¾ç½®èƒŒæ™¯
+    magnifier_.setSourcePixmap(&background_);
     update();
 }
 
-void ScreenshotOverlay::paintEvent(QPaintEvent* /*event*/) {
+void ScreenshotOverlay::paintEvent(QPaintEvent* /*event*/)
+{
     QPainter painter(this);
 
-    // ±³¾°£ºÔ­Ê¼ÆÁÄ»½ØÍ¼
+    // èƒŒæ™¯ï¼šåŸå§‹å±å¹•æˆªå›¾
     painter.drawPixmap(0, 0, background_);
 
-    // È«ÆÁ°ëÍ¸Ã÷ÕÚÕÖ
+    // å…¨å±åŠé€æ˜é®ç½©
     painter.fillRect(rect(), QColor(0, 0, 0, 120));
 
-    // »æÖÆÑ¡ÇøÄÚÈİºÍ±ß¿ò
+#ifdef Q_OS_WIN
+    // é€‰åŒºä¸ºç©º & æ­£åœ¨é€‰åŒºé˜¶æ®µæ—¶ï¼Œç”»è‡ªåŠ¨è¯†åˆ«çš„çª—å£é«˜äº®
+    if (stage_ == Stage::kSelecting &&
+        selection_.isNull() &&
+        hover_valid_)
+    {
+        painter.save();
+        painter.setPen(QPen(QColor(0, 120, 255), 2));
+        painter.setBrush(QColor(0, 120, 255, 50));
+        painter.drawRect(hover_rect_);
+        painter.restore();
+    }
+#endif
+
+    // ç»˜åˆ¶é€‰åŒºå†…å®¹å’Œè¾¹æ¡†
     if (!selection_.isNull()) {
+        painter.save();
+        QRect target = selection_;
         if (stage_ == Stage::kEditing && !canvas_.isNull()) {
-            // ±à¼­½×¶Î£º°Ñ»­²¼»­µ½Ñ¡ÇøÎ»ÖÃ
-            painter.drawPixmap(selection_.topLeft(), canvas_);
+            QRect src = ComputeZoomSourceRect(canvas_.size());
+            painter.drawPixmap(target, canvas_, src);
         }
         else {
-            // Ñ¡Çø½×¶Î£º½öÏÔÊ¾Ô­Ê¼ÄÚÈİ
             if (!background_.isNull()) {
                 QPixmap sub = background_.copy(selection_);
-                painter.drawPixmap(selection_.topLeft(), sub);
+                QRect   src = ComputeZoomSourceRect(sub.size());
+                painter.drawPixmap(target, sub, src);
             }
         }
+        painter.restore();
 
-        // Ñ¡Çø±ß¿ò
+        // é€‰åŒºè¾¹æ¡†
         painter.setPen(QPen(Qt::blue, 2));
         painter.drawRect(selection_);
-
-        //// ±à¼­½×¶Î + ÕıÔÚ»æÖÆÊ±£¬¿ÉÒÔ¶îÍâ»­¸¨Öú¿ò£¨ÀıÈç¾ØĞÎÔ¤ÀÀ£©
-        //if (stage_ == Stage::kEditing && is_drawing_) {
-        //    painter.setPen(QPen(current_color_, 1, Qt::DashLine));
-        //    QRect preview_rect(edit_start_pos_ + selection_.topLeft(),
-        //        edit_current_pos_ + selection_.topLeft());
-        //    painter.drawRect(preview_rect.normalized());
-        //}
-        // ±à¼­½×¶Î + ÕıÔÚ»æÖÆÊ±£¬»­ÊµÊ±Ô¤ÀÀ£¨Ê¹ÓÃ ShapeDrawer µÄ Preview º¯Êı£©
-        if (stage_ == Stage::kEditing && is_drawing_ && !canvas_.isNull()) {
-            painter.save();
-            // ½«×ø±êÏµÒÆ¶¯µ½Ñ¡Çø×óÉÏ£¬ÕâÑù preview Ê¹ÓÃµÄÊÇÑ¡ÇøÄÚµÄ¾Ö²¿×ø±ê
-            painter.translate(selection_.topLeft());
-            QRect preview_rect(edit_start_pos_, edit_current_pos_);
-            switch (draw_mode_) {
-            case DrawMode::kRect:
-                ShapeDrawer::DrawRectPreview(painter, preview_rect, current_color_, 2);
-                break;
-            case DrawMode::kEllipse:
-                ShapeDrawer::DrawEllipsePreview(painter, preview_rect, current_color_, 2);
-                break;
-            case DrawMode::kArrow:
-                ShapeDrawer::DrawArrowPreview(painter, edit_start_pos_, edit_current_pos_, current_color_, 2);
-                break;
-            default:
-                break;
-            }
-            painter.restore();
-        }
     }
+
+    // æœ€åç»Ÿä¸€ç»˜åˆ¶æ”¾å¤§é•œï¼ˆåŸºäºå½“å‰é¼ æ ‡ä½ç½®ï¼‰
+    magnifier_.paint(painter, rect());
 }
-//Êó±ê×ó¼ü°´ÏÂÊÂ¼ş
-void ScreenshotOverlay::mousePressEvent(QMouseEvent* event) {
+
+// é¼ æ ‡å·¦é”®æŒ‰ä¸‹äº‹ä»¶
+void ScreenshotOverlay::mousePressEvent(QMouseEvent* event)
+{
     const QPoint pos = event->pos();
 
     if (stage_ == Stage::kSelecting) {
         if (InsideSelection(pos)) {
-            // ÔÚÒÑÓĞÑ¡ÇøÄÚ²¿ -> ¿ªÊ¼ÒÆ¶¯
+            // åœ¨å·²æœ‰é€‰åŒºå†…éƒ¨ -> å¼€å§‹ç§»åŠ¨
             is_moving_ = true;
             drag_offset_ = pos - selection_.topLeft();
             toolbar_->hide();
+            if (sToolbar_) sToolbar_->hide();
         }
         else {
-            // ĞÂ½¨Ñ¡Çø
+            // æ–°å»ºé€‰åŒº
             is_selecting_ = true;
             selection_ = QRect(pos, pos);
             toolbar_->hide();
+            if (sToolbar_) sToolbar_->hide();
         }
         update();
         return;
     }
 
-    // ±à¼­½×¶Î£ºÔÚÑ¡ÇøÄÚ¿ªÊ¼»æÖÆ
+    // ç¼–è¾‘é˜¶æ®µï¼šåœ¨é€‰åŒºå†…å¼€å§‹ç»˜åˆ¶
     if (stage_ == Stage::kEditing) {
         if (!selection_.contains(pos)) {
             return;
@@ -120,24 +165,84 @@ void ScreenshotOverlay::mousePressEvent(QMouseEvent* event) {
         QPoint local = pos - selection_.topLeft();
 
         if (draw_mode_ != DrawMode::kNone) {
-            // ÔÚ»æÖÆÇ°±£´æ¿ìÕÕ£¬¹© Undo Ê¹ÓÃ
+            // åœ¨ç»˜åˆ¶å‰ä¿å­˜å¿«ç…§ï¼Œä¾› Undo ä½¿ç”¨ï¼ˆä¿å­˜ image + itemsï¼‰
             if (!canvas_.isNull()) {
-                undo_stack_.push_back(canvas_.toImage());
+                UndoState st;
+                st.image = canvas_.toImage();
+                st.items = items_;
+                undo_stack_.push_back(std::move(st));
                 redo_stack_.clear();
             }
 
             is_drawing_ = true;
             edit_start_pos_ = local;
             edit_current_pos_ = local;
-            // ½öË¢ĞÂÑ¡Çø¸½½ü£¬¼õÉÙÖØ»æ¿ªÏú
-            if (!selection_.isNull()) update(selection_.adjusted(-20, -20, 20, 20));            
-            else update();
+
+            // æ–°å»º preview_item_
+            preview_item_.reset(new DrawItem());
+            preview_item_->color = current_color_;
+            preview_item_->stroke_width = stroke_width_;
+
+            switch (draw_mode_) {
+            case DrawMode::kRect:
+                preview_item_->type = DrawItem::Type::kRect;
+                preview_item_->rect = QRect(edit_start_pos_, edit_start_pos_);
+                break;
+            case DrawMode::kEllipse:
+                preview_item_->type = DrawItem::Type::kEllipse;
+                preview_item_->rect = QRect(edit_start_pos_, edit_start_pos_);
+                break;
+            case DrawMode::kArrow:
+                preview_item_->type = DrawItem::Type::kArrow;
+                preview_item_->p1 = edit_start_pos_;
+                preview_item_->p2 = edit_start_pos_;
+                break;
+            case DrawMode::kPen:
+                preview_item_->type = DrawItem::Type::kPen;
+                preview_item_->path.clear();
+                preview_item_->path.append(edit_start_pos_);
+                break;
+            case DrawMode::kEraser:
+                // æŒ‰ä½ Shift åˆ‡æ¢ä¸ºå¯¹è±¡æ©¡çš®
+                eraser_object_mode_ = (event->modifiers() & Qt::ShiftModifier);
+                if (eraser_object_mode_) {
+                    // preview as path; actual deletion on release
+                    preview_item_->type = DrawItem::Type::kPen; // reuse path
+                    preview_item_->path.clear();
+                    preview_item_->path.append(edit_start_pos_);
+                } else {
+                    preview_item_->type = DrawItem::Type::kEraserFree;
+                    preview_item_->path.clear();
+                    preview_item_->path.append(edit_start_pos_);
+                    preview_item_->stroke_width = stroke_width_;
+                }
+                break;
+            case DrawMode::kMosaic:
+                preview_item_->type = DrawItem::Type::kMosaic;
+                preview_item_->rect = QRect(edit_start_pos_, edit_start_pos_);
+                preview_item_->mosaic_level = mosaicTool_ ? mosaicTool_->blurLevel() : 10;
+                break;
+            case DrawMode::kBlur:
+                preview_item_->type = DrawItem::Type::kBlur;
+                preview_item_->rect = QRect(edit_start_pos_, edit_start_pos_);
+                preview_item_->blur_opacity = blurTool_ ? blurTool_->opacity() : 50;
+                break;
+            default:
+                break;
+            }
+
+            // å³æ—¶ç»˜åˆ¶é¢„è§ˆ
+            RepaintCanvasFromItems(preview_item_.get());
         }
     }
 }
-//Êó±êÒÆ¶¯ÊÂ¼ş
-void ScreenshotOverlay::mouseMoveEvent(QMouseEvent* event) {
+
+// é¼ æ ‡ç§»åŠ¨äº‹ä»¶
+void ScreenshotOverlay::mouseMoveEvent(QMouseEvent* event)
+{
     const QPoint pos = event->pos();
+    cursor_pos_ = pos;                 // æ”¾å¤§é•œç”¨
+    magnifier_.setCursorPos(pos);
 
     if (stage_ == Stage::kSelecting) {
         if (is_moving_) {
@@ -145,10 +250,38 @@ void ScreenshotOverlay::mouseMoveEvent(QMouseEvent* event) {
             selection_.moveTo(new_top_left);
             if (toolbar_->isVisible()) {
                 UpdateToolbarPosition();
+                UpdateSecondaryToolbarPosition();
             }
         }
         else if (is_selecting_) {
             selection_.setBottomRight(pos);
+        }
+        else {
+            // æ²¡åœ¨æ‹‰é€‰åŒºã€ä¹Ÿæ²¡åœ¨æ‹–åŠ¨ï¼šåšè‡ªåŠ¨çª—å£è¯†åˆ«ï¼ˆHover é«˜äº®ï¼‰
+#ifdef Q_OS_WIN
+            // 1. æš‚æ—¶å…è®¸é¼ æ ‡ç©¿é€å½“å‰ overlayï¼Œé¿å… UIAutomation å‘½ä¸­è‡ªå·±
+            HWND hwnd = reinterpret_cast<HWND>(winId());
+            LONG exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT);
+
+            // 2. ä½¿ç”¨ UIAutomation é€šè¿‡å…¨å±€åæ ‡è·å–æ§ä»¶/çª—å£çŸ©å½¢ï¼ˆå±å¹•åæ ‡ï¼‰
+            QPoint globalPos = mapToGlobal(pos);
+            QRect  screenRect = ui_inspector_.quickInspect(globalPos);
+
+            // 3. æ¢å¤çª—å£æ ·å¼
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle);
+
+            if (screenRect.isValid()) {
+                // è½¬æˆå½“å‰ overlay å†…éƒ¨åæ ‡
+                QRect widgetRect(mapFromGlobal(screenRect.topLeft()),
+                    screenRect.size());
+                hover_rect_ = widgetRect.intersected(rect());
+                hover_valid_ = hover_rect_.isValid();
+            }
+            else {
+                hover_valid_ = false;
+            }
+#endif
         }
         update();
         return;
@@ -156,11 +289,46 @@ void ScreenshotOverlay::mouseMoveEvent(QMouseEvent* event) {
 
     if (stage_ == Stage::kEditing && is_drawing_) {
         edit_current_pos_ = pos - selection_.topLeft();
-        update();
+
+        if (preview_item_) {
+            switch (preview_item_->type) {
+            case DrawItem::Type::kRect:
+            case DrawItem::Type::kEllipse:
+            case DrawItem::Type::kMosaic:
+            case DrawItem::Type::kBlur:
+                preview_item_->rect = QRect(edit_start_pos_, edit_current_pos_).normalized();
+                break;
+            case DrawItem::Type::kArrow:
+                preview_item_->p2 = edit_current_pos_;
+                preview_item_->rect = QRect(preview_item_->p1.toPoint(), preview_item_->p2.toPoint()).normalized();
+                break;
+            case DrawItem::Type::kPen:
+                // append if movement significant
+                if (preview_item_->path.isEmpty() || (preview_item_->path.last() - edit_current_pos_).manhattanLength() > 1) {
+                    preview_item_->path.append(edit_current_pos_);
+                }
+                break;
+            case DrawItem::Type::kEraserFree:
+                if (preview_item_->path.isEmpty() || (preview_item_->path.last() - edit_current_pos_).manhattanLength() > 1) {
+                    preview_item_->path.append(edit_current_pos_);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
+        RepaintCanvasFromItems(preview_item_.get());
+        return;
     }
+
+    // å…¶å®ƒé˜¶æ®µä¹Ÿé‡ç»˜ä¸€ä¸‹ï¼ˆæ”¾å¤§é•œä½ç½®ä¼šå˜ï¼‰
+    update();
 }
-//Êó±ê×ó¼üÊÍ·ÅÊÂ¼ş
-void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
+
+// é¼ æ ‡å·¦é”®é‡Šæ”¾äº‹ä»¶
+void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event)
+{
     Q_UNUSED(event);
 
     if (stage_ == Stage::kSelecting) {
@@ -171,11 +339,15 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
             if (selection_.width() < 5 || selection_.height() < 5) {
                 selection_ = QRect();
                 toolbar_->hide();
+                if (sToolbar_) sToolbar_->hide();
             }
             else {
-                // À­³öÒ»¸öĞÂµÄÓĞĞ§Ñ¡Çø£ºÏÔÊ¾¹¤¾ßÀ¸
                 toolbar_->show();
                 UpdateToolbarPosition();
+                UpdateSecondaryToolbarPosition();
+                zoom_scale_ = 1.0;
+                zoom_center_ = QPointF(selection_.width() / 2.0,
+                    selection_.height() / 2.0);
             }
         }
 
@@ -183,9 +355,11 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
             is_moving_ = false;
 
             if (!selection_.isNull()) {
-                // ÒÆ¶¯½áÊø£ºÖØĞÂÏÔÊ¾¹¤¾ßÀ¸£¬²¢¸ù¾İĞÂµÄÑ¡ÇøÎ»ÖÃ°Ú·Å
                 toolbar_->show();
                 UpdateToolbarPosition();
+                UpdateSecondaryToolbarPosition();
+                zoom_center_ = QPointF(selection_.width() / 2.0,
+                    selection_.height() / 2.0);
             }
         }
 
@@ -193,8 +367,7 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
         return;
     }
 
-
-    // ±à¼­½×¶Î£º½áÊø»æÖÆ
+    // ç¼–è¾‘é˜¶æ®µï¼šç»“æŸç»˜åˆ¶ï¼ˆRect / Ellipse / Arrow / Mosaic / Blur / Pen / Eraserï¼‰
     if (stage_ == Stage::kEditing && is_drawing_) {
         is_drawing_ = false;
 
@@ -202,74 +375,120 @@ void ScreenshotOverlay::mouseReleaseEvent(QMouseEvent* event) {
             return;
         }
 
-        QPoint end_local = edit_current_pos_;//Êó±êÍÏ¶¯¹ı³ÌÖĞÊµÊ±¸üĞÂµÄµã£¬ËÉ¿ªÄÇÒ»¿Ì¾ÍÊÇ¡°ÖÕµã¡±
-        // ±£Ö¤µãÔÚ canvas ·¶Î§ÄÚ
-        auto clampPoint = [&](QPoint p) {
-            p.setX(qBound(0, p.x(), canvas_.width() - 1));
-            p.setY(qBound(0, p.y(), canvas_.height() - 1));
-            return p;
-            };
-        //
-        //edit_start_pos¾ÍÊÇÊó±ê¿ªÊ¼µÄµã
-        QPoint start = clampPoint(edit_start_pos_);
-        QPoint end = clampPoint(end_local);
-        QRect area(edit_start_pos_, end_local);
-        area = area.normalized();
-        switch (draw_mode_) {
-        case DrawMode::kRect: {
-            ShapeDrawer::DrawRect(canvas_, area, current_color_, 2, false);
-            break;
-        }
-        case DrawMode::kEllipse: {
-            ShapeDrawer::DrawEllipse(canvas_, area, current_color_, 2, false);
-            break;
-        }
-        case DrawMode::kArrow: {
-            ShapeDrawer::DrawArrow(canvas_, start, end, current_color_, 2);
-            break;
-        }
-        case DrawMode::kMosaic:
+        if (!preview_item_) return;
 
-            break;
-        case DrawMode::kBlur:
-
-            break;
-        default:
-            break;
+        // å®Œæˆé¢„è§ˆå¹¶æŠŠ preview_item_ è½¬ä¸ºæ­£å¼ itemï¼ˆæˆ–æ‰§è¡Œå¯¹è±¡æ“¦é™¤ï¼‰
+        if (preview_item_->type == DrawItem::Type::kEraserFree) {
+            // è‡ªç”±åƒç´ æ“¦é™¤ï¼šæŠŠä¸€ä¸ª EraserFree item push åˆ° items_
+            DrawItem itm = *preview_item_;
+            items_.push_back(itm);
         }
+        else {
+            // å¯¹è±¡æ©¡çš®æ¨¡å¼ï¼ˆShiftï¼‰: åˆ é™¤è¢«æ“¦é™¤å¯¹è±¡
+            if (draw_mode_ == DrawMode::kEraser && eraser_object_mode_) {
+                // preview_item_->path å­˜å‚¨äº†æ“¦é™¤è½¨è¿¹
+                QVector<QPoint> erasePath = preview_item_->path;
+                int radius = preview_item_->stroke_width;
+                QVector<int> removeIdx;
+                for (int i = 0; i < items_.size(); ++i) {
+                    if (ItemHitTest(items_[i], erasePath, radius)) {
+                        removeIdx.append(i);
+                    }
+                }
+                // ä»åå¾€å‰åˆ é™¤
+                for (int i = removeIdx.size()-1; i>=0; --i) {
+                    items_.remove(removeIdx[i]);
+                }
+            } else {
+                // æ™®é€šå¯¹è±¡ï¼šrect/ellipse/arrow/pen/mosaic/blur
+                DrawItem itm = *preview_item_;
+                // normalize rect if needed
+                if (!itm.rect.isNull()) itm.rect = itm.rect.normalized();
+                items_.push_back(itm);
+            }
+        }
+
+        // æ¸…é™¤ preview å¹¶é‡ç»˜ canvas
+        preview_item_.reset();
+        RepaintCanvasFromItems(nullptr);
 
         modified_ = true;
         update();
     }
 }
 
-bool ScreenshotOverlay::InsideSelection(const QPoint& pos) const {
+bool ScreenshotOverlay::InsideSelection(const QPoint& pos) const
+{
     return selection_.contains(pos);
 }
-//¼üÅÌÊÂ¼ş
-void ScreenshotOverlay::keyPressEvent(QKeyEvent* event) {
+
+// é”®ç›˜äº‹ä»¶
+void ScreenshotOverlay::keyPressEvent(QKeyEvent* event)
+{
     if (event->key() == Qt::Key_Escape) {
         close();
     }
 }
 
-void ScreenshotOverlay::resizeEvent(QResizeEvent* event) {
+void ScreenshotOverlay::wheelEvent(QWheelEvent* event)
+{
+    if (selection_.isNull()) {
+        return;
+    }
+    const int delta = event->angleDelta().y();
+    if (delta == 0) return;
+    QPoint p = event->position().toPoint();
+    if (selection_.contains(p)) {
+        QPoint local = p - selection_.topLeft();
+        zoom_center_ = QPointF(local);
+    }
+    double factor = (delta > 0) ? 1.1 : 0.9;
+    zoom_scale_ *= factor;
+    if (zoom_scale_ < 0.2) zoom_scale_ = 0.2;
+    if (zoom_scale_ > 8.0) zoom_scale_ = 8.0;
+    update();
+}
+
+QRect ScreenshotOverlay::ComputeZoomSourceRect(const QSize& content_size) const
+{
+    if (content_size.isEmpty()) return QRect();
+    double w = content_size.width() / zoom_scale_;
+    double h = content_size.height() / zoom_scale_;
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    QPointF center = zoom_center_;
+    if (center.isNull()) {
+        center = QPointF(content_size.width() / 2.0, content_size.height() / 2.0);
+    }
+    double x = center.x() - w / 2.0;
+    double y = center.y() - h / 2.0;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x + w > content_size.width()) x = content_size.width() - w;
+    if (y + h > content_size.height()) y = content_size.height() - h;
+    return QRect(int(x), int(y), int(w), int(h));
+}
+
+void ScreenshotOverlay::resizeEvent(QResizeEvent* event)
+{
     QWidget::resizeEvent(event);
 
     if (toolbar_ && toolbar_->isVisible() && !selection_.isNull()) {
         UpdateToolbarPosition();
+        UpdateSecondaryToolbarPosition();
     }
 }
 
-// ¹¤¾ßÀ¸Î»ÖÃ£ºÑ¡ÇøÏÂ·½£¬ÓÒ±ßÔµ¶ÔÆëÑ¡ÇøÓÒ±ßÔµ
-void ScreenshotOverlay::UpdateToolbarPosition() {
+// å·¥å…·æ ä½ç½®ï¼šé€‰åŒºä¸‹æ–¹ï¼Œå³è¾¹ç¼˜å¯¹é½é€‰åŒºå³è¾¹ç¼˜
+void ScreenshotOverlay::UpdateToolbarPosition()
+{
     if (!toolbar_ || selection_.isNull()) {
         return;
     }
 
     const QSize tb_size = toolbar_->sizeHint();
-    const int w = tb_size.width();
-    const int h = toolbar_->height() > 0 ? toolbar_->height() : tb_size.height();
+    const int   w = tb_size.width();
+    const int   h = toolbar_->height() > 0 ? toolbar_->height() : tb_size.height();
 
     int x = selection_.right() - w;
     int y = selection_.bottom() + 8;
@@ -291,7 +510,40 @@ void ScreenshotOverlay::UpdateToolbarPosition() {
     toolbar_->setGeometry(x, y, w, h);
 }
 
-void ScreenshotOverlay::StartEditingIfNeeded() {
+// äºŒçº§å·¥å…·æ ä½ç½®
+void ScreenshotOverlay::UpdateSecondaryToolbarPosition()
+{
+    if (!sToolbar_ || !toolbar_ || !sToolbar_->isVisible()) {
+        return;
+    }
+
+    // ä¸€çº§å·¥å…·æ å·¦ä¸Šè§’çš„å…¨å±€åæ ‡
+    QPoint tbPosGlobal = toolbar_->mapToGlobal(QPoint(0, 0));
+
+    // å’Œä¸€çº§å·¥å…·æ å·¦ä¾§å¯¹é½
+    int x = tbPosGlobal.x();
+    int y = tbPosGlobal.y() + toolbar_->height() + 6;  // åœ¨ä¸‹æ–¹ 6px
+
+    // é˜²æ­¢å‡ºå±
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        const QRect sr = screen->availableGeometry();
+
+        if (x < sr.left())
+            x = sr.left();
+        if (x + sToolbar_->width() > sr.right())
+            x = sr.right() - sToolbar_->width();
+
+        if (y + sToolbar_->height() > sr.bottom()) {
+            // å¦‚æœåº•éƒ¨æ”¾ä¸ä¸‹ï¼Œå°±æ”¾åˆ°å·¥å…·æ ä¸Šæ–¹
+            y = tbPosGlobal.y() - sToolbar_->height() - 6;
+        }
+    }
+
+    sToolbar_->move(x, y);
+}
+
+void ScreenshotOverlay::StartEditingIfNeeded()
+{
     if (stage_ == Stage::kEditing) {
         return;
     }
@@ -299,15 +551,20 @@ void ScreenshotOverlay::StartEditingIfNeeded() {
         return;
     }
 
-    canvas_ = background_.copy(selection_);
+    base_pixmap_ = background_.copy(selection_);
+    canvas_ = base_pixmap_;
     modified_ = false;
     undo_stack_.clear();
     redo_stack_.clear();
+    items_.clear();
+    preview_item_.reset();
 
     stage_ = Stage::kEditing;
 }
-//µÃµ½ÏÖÔÚµÄ½á¹ûÍ¼Ïñ£ºÓÅÏÈ·µ»Ø±à¼­»­²¼£¬·ñÔòÔ­Ê¼Ñ¡Çø
-QPixmap ScreenshotOverlay::CurrentResultPixmap() const {
+
+//å¾—åˆ°ç°åœ¨çš„ç»“æœå›¾åƒï¼šä¼˜å…ˆè¿”å›ç¼–è¾‘ç”»å¸ƒï¼Œå¦åˆ™åŸå§‹é€‰åŒº
+QPixmap ScreenshotOverlay::CurrentResultPixmap() const
+{
     if (stage_ == Stage::kEditing && !canvas_.isNull()) {
         return canvas_;
     }
@@ -316,8 +573,10 @@ QPixmap ScreenshotOverlay::CurrentResultPixmap() const {
     }
     return QPixmap();
 }
-//¸´ÖÆµ½¼ôÇĞ°å
-void ScreenshotOverlay::CopyResultToClipboard() {
+
+//å¤åˆ¶åˆ°å‰ªåˆ‡æ¿
+void ScreenshotOverlay::CopyResultToClipboard()
+{
     QPixmap result = CurrentResultPixmap();
     if (result.isNull()) {
         return;
@@ -325,103 +584,195 @@ void ScreenshotOverlay::CopyResultToClipboard() {
     QClipboard* cb = QGuiApplication::clipboard();
     cb->setPixmap(result);
 }
-//±£´æµ½±¾µØ
-void ScreenshotOverlay::SaveToFile() {
+
+//ä¿å­˜åˆ°æœ¬åœ°
+void ScreenshotOverlay::SaveToFile()
+{
     QPixmap result = CurrentResultPixmap();
     if (result.isNull()) {
         return;
     }
 
+    const QString timestamp =
+        QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
+
+    const QString default_file_name =
+        QString("qtscreenshot-%1.png").arg(timestamp);
+
+    QString default_dir =
+        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (default_dir.isEmpty()) {
+        default_dir = QDir::currentPath();
+    }
+
+    const QString default_path =
+        QDir(default_dir).filePath(default_file_name);
+
     QString path = QFileDialog::getSaveFileName(
         this,
         tr("Save Screenshot"),
-        QString(),
+        default_path,
         tr("PNG Image (*.png);;JPEG Image (*.jpg *.jpeg);;Bitmap (*.bmp)"));
+
     if (path.isEmpty()) {
         return;
     }
 
     result.save(path);
 }
-//AI
-void ScreenshotOverlay::RunAiOcr() {
+
+//OCR
+void ScreenshotOverlay::RunAiOcr()
+{
     QPixmap result = CurrentResultPixmap();
     if (result.isNull()) {
         return;
     }
-    // TODO: ´ò¿ªÒ»¸öĞÂ´°¿Ú£¬×ó²àÏÔÊ¾ result£¬ÓÒ²àÏÔÊ¾Ê¶±ğ³öµÄÎÄ×Ö
-}
-//AI ÃèÊö
-void ScreenshotOverlay::RunAiDescribe() {
-    QPixmap result = CurrentResultPixmap();
-    if (result.isNull()) {
-        return;
-    }
-    // TODO: ´ò¿ªÒ»¸öĞÂ´°¿Ú£¬×ó²àÏÔÊ¾ result£¬ÓÒ²àÏÔÊ¾ AI Éú³ÉµÄÃèÊö
-}
-//pin
-void ScreenshotOverlay::PinToDesktop() {
-    QPixmap result = CurrentResultPixmap();
-    if (result.isNull()) {
-        return;
-    }
-    // TODO: ´´½¨Ò»¸öÎŞ±ß¿ò¡¢ÖÃ¶¥µÄĞ¡´°¿ÚÏÔÊ¾ result£¬Ïàµ±ÓÚ¡°ÌùÔÚ×ÀÃæ¡±
+    // TODO: æ‰“å¼€ä¸€ä¸ªæ–°çª—å£ï¼Œå·¦ä¾§æ˜¾ç¤º resultï¼Œå³ä¾§æ˜¾ç¤ºè¯†åˆ«å‡ºçš„æ–‡å­—
 }
 
-void ScreenshotOverlay::Undo() {
+//AI æè¿°
+void ScreenshotOverlay::RunAiDescribe()
+{
+    //QPixmap result = CurrentResultPixmap();
+    //if (result.isNull()) {
+    //    return;
+    //}
+
+    //// å¼¹å‡º AI æè¿°çª—å£
+    //auto* dlg = new AiDescribeDialog(result, nullptr);
+
+    //// è®¾ç½® API Key / æ¨¡å‹ï¼ˆä¹Ÿå¯ä»¥å†…éƒ¨ç”¨ç¯å¢ƒå˜é‡ï¼‰
+    //dlg->setApiKey("284143f6-2e1b-42a1-8acb-82007ebe0c1d");
+    //dlg->setModel("doubao-seed-1-6-flash-250828");
+
+    //dlg->setAttribute(Qt::WA_DeleteOnClose);
+    //dlg->show();
+    //close();
+}
+
+//pin
+void ScreenshotOverlay::PinToDesktop()
+{
+    QPixmap result = CurrentResultPixmap();
+    if (result.isNull()) {
+        return;
+    }
+    PinnedWindow::Pinned(result, nullptr);
+}
+
+void ScreenshotOverlay::Undo()
+{
     if (undo_stack_.isEmpty() || canvas_.isNull()) {
         return;
     }
-    redo_stack_.push_back(canvas_.toImage());
-    canvas_ = QPixmap::fromImage(undo_stack_.takeLast());
+    // push current to redo
+    {
+        UndoState cur;
+        cur.image = canvas_.toImage();
+        cur.items = items_;
+        redo_stack_.push_back(std::move(cur));
+    }
+    // restore last undo
+    UndoState st = undo_stack_.takeLast();
+    canvas_ = QPixmap::fromImage(st.image);
+    items_ = st.items;
     modified_ = true;
     update();
 }
 
-void ScreenshotOverlay::Redo() {
+void ScreenshotOverlay::Redo()
+{
     if (redo_stack_.isEmpty() || canvas_.isNull()) {
         return;
     }
-    undo_stack_.push_back(canvas_.toImage());
-    canvas_ = QPixmap::fromImage(redo_stack_.takeLast());
+    // push current to undo
+    {
+        UndoState cur;
+        cur.image = canvas_.toImage();
+        cur.items = items_;
+        undo_stack_.push_back(std::move(cur));
+    }
+    // restore last redo
+    UndoState st = redo_stack_.takeLast();
+    canvas_ = QPixmap::fromImage(st.image);
+    items_ = st.items;
     modified_ = true;
     update();
 }
 
-void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
+void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool)
+{
+    // åˆ‡æ¢å·¥å…·å‰å…ˆæŠŠå…¶å®ƒ popup æ”¶èµ·æ¥
+    if (mosaicPopup_) mosaicPopup_->hide();
+    if (blurPopup_)   blurPopup_->hide();
+    if (sToolbar_)    sToolbar_->hide();
+
     switch (tool) {
-        // »æÍ¼¹¤¾ß£º¹Ì¶¨Ñ¡Çø£¬½øÈë±à¼­½×¶Î + ÇĞ»»Ä£Ê½
+        // ç»˜å›¾å·¥å…·ï¼šå›ºå®šé€‰åŒºï¼Œè¿›å…¥ç¼–è¾‘é˜¶æ®µ + åˆ‡æ¢æ¨¡å¼
     case EditorToolbar::Tool::kRect:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kRect;
+        if (sToolbar_) {
+            sToolbar_->SetMode(SecondaryToolBar::StrokeMode);
+            sToolbar_->show();
+            UpdateSecondaryToolbarPosition();
+        }
         break;
+
     case EditorToolbar::Tool::kEllipse:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kEllipse;
+        if (sToolbar_) {
+            sToolbar_->SetMode(SecondaryToolBar::StrokeMode);
+            sToolbar_->show();
+            UpdateSecondaryToolbarPosition();
+        }
         break;
+
     case EditorToolbar::Tool::kArrow:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kArrow;
+        if (sToolbar_) {
+            sToolbar_->SetMode(SecondaryToolBar::StrokeMode);
+            sToolbar_->show();
+            UpdateSecondaryToolbarPosition();
+        }
         break;
+
+    case EditorToolbar::Tool::kPen:
+        StartEditingIfNeeded();
+        draw_mode_ = DrawMode::kPen;
+        if (sToolbar_) {
+            sToolbar_->SetMode(SecondaryToolBar::StrokeMode);
+            sToolbar_->show();
+            UpdateSecondaryToolbarPosition();
+        }
+        break;
+
+    case EditorToolbar::Tool::kEraser:
+        StartEditingIfNeeded();
+        draw_mode_ = DrawMode::kEraser;
+        if (sToolbar_) {
+            sToolbar_->SetMode(SecondaryToolBar::EraserMode);
+            sToolbar_->show();
+            UpdateSecondaryToolbarPosition();
+        }
+        break;
+
     case EditorToolbar::Tool::kMosaic:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kMosaic;
+        // æ˜¾ç¤ºé©¬èµ›å…‹è®¾ç½®æ 
+        showToolPopup(mosaicPopup_);
         break;
+
     case EditorToolbar::Tool::kBlur:
         StartEditingIfNeeded();
         draw_mode_ = DrawMode::kBlur;
+        // æ˜¾ç¤ºæ¨¡ç³Šè®¾ç½®æ 
+        showToolPopup(blurPopup_);
         break;
-
-    case EditorToolbar::Tool::kColor: {
-        StartEditingIfNeeded();  // ¿ÉÑ¡£ºÒ²¿ÉÒÔÔÊĞíÔÚÑ¡Çø½×¶Î¾Í»»ÑÕÉ«
-        QColor c =
-            QColorDialog::getColor(current_color_, this, tr("Select Color"));
-        if (c.isValid()) {
-            current_color_ = c;
-            // TODO: Í¬²½µ½¹¤¾ßÀ¸ Color °´Å¥µÄÍâ¹Û
-        }
-        break;
-    }
 
     case EditorToolbar::Tool::kUndo:
         Undo();
@@ -440,7 +791,7 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
         break;
 
     case EditorToolbar::Tool::kLongShot:
-        // TODO: ÊµÏÖ³¤½ØÍ¼Âß¼­
+        // TODO: å®ç°é•¿æˆªå›¾é€»è¾‘
         break;
 
     case EditorToolbar::Tool::kPin:
@@ -452,11 +803,7 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
     case EditorToolbar::Tool::kSave:
         StartEditingIfNeeded();
         SaveToFile();
-        break;
-
-    case EditorToolbar::Tool::kCopy:
-        StartEditingIfNeeded();
-        CopyResultToClipboard();
+        close();
         break;
 
     case EditorToolbar::Tool::kDone:
@@ -472,4 +819,204 @@ void ScreenshotOverlay::OnToolSelected(EditorToolbar::Tool tool) {
     default:
         break;
     }
+}
+
+void ScreenshotOverlay::showToolPopup(QWidget* popup)
+{
+    if (!popup || !toolbar_) return;
+
+    // è·å–å·¥å…·æ åœ¨ä¸»å±å¹•çš„ä½ç½®
+    QPoint toolbarPos = toolbar_->mapToGlobal(QPoint(0, 0));
+    QRect  toolbarRect = toolbar_->rect();
+
+    // è®¡ç®—å¼¹å‡ºä½ç½®ï¼šå·¥å…·æ ä¸‹æ–¹ä¸­å¤®
+    int x = toolbarPos.x() + (toolbarRect.width() - popup->width()) / 2;
+    int y = toolbarPos.y() + toolbarRect.height() + 8;
+
+    // ç¡®ä¿ä¸è¶…å‡ºå±å¹•è¾¹ç•Œ
+    QScreen* screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        QRect screenRect = screen->availableGeometry();
+        if (x + popup->width() > screenRect.right()) {
+            x = screenRect.right() - popup->width();
+        }
+        if (x < screenRect.left()) {
+            x = screenRect.left();
+        }
+        if (y + popup->height() > screenRect.bottom()) {
+            y = toolbarPos.y() - popup->height() - 8;
+        }
+    }
+
+    popup->move(x, y);
+    popup->show();
+    popup->raise();
+}
+
+// ---------- åˆæˆæ¸²æŸ“ï¼šä» base_pixmap_ + items_ é‡æ–°ç”Ÿæˆ canvas_ ----------
+void ScreenshotOverlay::RepaintCanvasFromItems(const DrawItem* preview /*= nullptr*/) {
+    if (base_pixmap_.isNull()) return;
+    canvas_ = base_pixmap_.copy();
+    QPainter p(&canvas_);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    auto drawItem = [&](const DrawItem& it) {
+        switch (it.type) {
+        case DrawItem::Type::kRect: {
+            QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(pen);
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(it.rect);
+            break;
+        }
+        case DrawItem::Type::kEllipse: {
+            QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(pen);
+            p.setBrush(Qt::NoBrush);
+            p.drawEllipse(it.rect);
+            break;
+        }
+        case DrawItem::Type::kArrow: {
+            QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+            p.setPen(pen);
+            QPointF a = it.p1, b = it.p2;
+            p.drawLine(a, b);
+            // draw arrow head
+            QPointF dir = a - b;
+            double len = std::hypot(dir.x(), dir.y());
+            if (len > 0.1) {
+                double ux = dir.x() / len;
+                double uy = dir.y() / len;
+                double hl = std::max(10.0, it.stroke_width * 3.0);
+                double angle = M_PI / 6.0; // 30 degrees
+                QPointF p1 = b + QPointF(ux * hl * std::cos(angle) - uy * hl * std::sin(angle),
+                                         ux * hl * std::sin(angle) + uy * hl * std::cos(angle));
+                QPointF p2 = b + QPointF(ux * hl * std::cos(-angle) - uy * hl * std::sin(-angle),
+                                         ux * hl * std::sin(-angle) + uy * hl * std::cos(-angle));
+                QPolygonF poly;
+                poly << b << p1 << p2;
+                p.setBrush(it.color);
+                p.drawPolygon(poly);
+                p.setBrush(Qt::NoBrush);
+            }
+            break;
+        }
+        case DrawItem::Type::kPen: {
+            if (it.path.size() >= 2) {
+                QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                p.setPen(pen);
+                QPainterPath qp;
+                qp.moveTo(it.path[0]);
+                for (int i = 1; i < it.path.size(); ++i) qp.lineTo(it.path[i]);
+                p.drawPath(qp);
+            } else if (it.path.size() == 1) {
+                QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+                p.setPen(pen);
+                p.drawPoint(it.path[0]);
+            }
+            break;
+        }
+        case DrawItem::Type::kMosaic: {
+            // ä½¿ç”¨ç°æœ‰é©¬èµ›å…‹å·¥å…·ï¼Œæ³¨æ„ä¼ å…¥çš„æ˜¯ canvas_ çš„åæ ‡ç³»ï¼ˆarea ç›¸å¯¹äº canvasï¼‰
+            if (mosaicTool_) {
+                MosaicTool::applyEffect(canvas_, it.rect, it.mosaic_level);
+            }
+            break;
+        }
+        case DrawItem::Type::kBlur: {
+            if (blurTool_) {
+                BlurTool::applyEffect(canvas_, it.rect, it.blur_opacity);
+            }
+            break;
+        }
+        case DrawItem::Type::kEraserFree: {
+            // å°† base_pixmap_ ä¸Šå¯¹åº”åœ†åˆ·åŒºåŸŸå¤åˆ¶å› canvas_
+            QImage baseImg = base_pixmap_.toImage();
+            QImage dstImg = canvas_.toImage();
+            int radius = it.stroke_width / 2;
+            for (const QPoint& pt : it.path) {
+                int cx = pt.x();
+                int cy = pt.y();
+                int x0 = std::max(0, cx - radius);
+                int y0 = std::max(0, cy - radius);
+                int x1 = min(baseImg.width()-1, cx + radius);
+                int y1 = min(baseImg.height()-1, cy + radius);
+                for (int y = y0; y <= y1; ++y) {
+                    for (int x = x0; x <= x1; ++x) {
+                        int dx = x - cx;
+                        int dy = y - cy;
+                        if (dx*dx + dy*dy <= radius*radius) {
+                            dstImg.setPixel(x, y, baseImg.pixel(x,y));
+                        }
+                    }
+                }
+            }
+            canvas_ = QPixmap::fromImage(dstImg);
+            p.end();
+            p.begin(&canvas_);
+            break;
+        }
+        default:
+            break;
+        }
+    };
+
+    // ç»˜åˆ¶å·²æäº¤ items_
+    for (const DrawItem& it : items_) {
+        drawItem(it);
+    }
+
+    // ç»˜åˆ¶ previewï¼ˆä¸åŠ å…¥ itemsï¼‰
+    if (preview) {
+        drawItem(*preview);
+    }
+
+    p.end();
+    update();
+}
+
+// ç®€å•çš„ hit-testï¼šåŸºäº bounding box æ‰©å±•æ©¡çš®åŠå¾„ï¼Œæˆ–æ£€æµ‹è·¯å¾„ç‚¹è·ç¦»
+bool ScreenshotOverlay::ItemHitTest(const DrawItem& item, const QVector<QPoint>& eraserPath, int eraserRadius) const {
+    if (eraserPath.isEmpty()) return false;
+    QRect itemRect = item.rect;
+    if (item.type == DrawItem::Type::kPen) {
+        // compute bounding rect from path
+        if (!item.path.isEmpty()) {
+            int minx = item.path[0].x(), miny = item.path[0].y();
+            int maxx = minx, maxy = miny;
+            for (const QPoint& p : item.path) {
+                minx = min(minx, p.x()); miny = min(miny, p.y());
+                maxx = std::max(maxx, p.x()); maxy = std::max(maxy, p.y());
+            }
+            itemRect = QRect(QPoint(minx, miny), QPoint(maxx, maxy));
+        }
+    } else if (item.type == DrawItem::Type::kArrow) {
+        itemRect = QRect(item.p1.toPoint(), item.p2.toPoint()).normalized();
+    }
+
+    QRect eraseBounds;
+    // compute bounding box of eraser path
+    int minx = eraserPath[0].x(), miny = eraserPath[0].y();
+    int maxx = minx, maxy = miny;
+    for (const QPoint& p : eraserPath) {
+        minx = min(minx, p.x()); miny = min(miny, p.y());
+        maxx = std::max(maxx, p.x()); maxy = std::max(maxy, p.y());
+    }
+    eraseBounds = QRect(QPoint(minx - eraserRadius, miny - eraserRadius),
+                        QPoint(maxx + eraserRadius, maxy + eraserRadius));
+
+    if (itemRect.intersects(eraseBounds)) return true;
+
+    // æ›´ç²¾ç¡®ï¼šå¯¹ pen è·¯å¾„ç‚¹æ£€æµ‹åˆ°æ“¦é™¤è·¯å¾„çš„æœ€å°è·ç¦»
+    if (item.type == DrawItem::Type::kPen && !item.path.isEmpty()) {
+        for (const QPoint& p1 : item.path) {
+            for (const QPoint& p2 : eraserPath) {
+                int dx = p1.x() - p2.x();
+                int dy = p1.y() - p2.y();
+                if (dx*dx + dy*dy <= eraserRadius * eraserRadius) return true;
+            }
+        }
+    }
+
+    return false;
 }
