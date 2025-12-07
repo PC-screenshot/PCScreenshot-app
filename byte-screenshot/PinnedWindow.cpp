@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QApplication>
 #include <QTimer>
+#include <QToolTip>
 #include <QPointer>
 #include <QDialog>
 #include <QTextEdit>
@@ -236,6 +237,22 @@ void PinnedWindow::keyPressEvent(QKeyEvent* event) {
 void PinnedWindow::wheelEvent(QWheelEvent* event) {
   const int delta = event->angleDelta().y();
   if (delta == 0) return;
+
+  // 支持 Ctrl + 滚轮调节透明度
+  if (event->modifiers() == Qt::ControlModifier) {
+      qreal opacity = windowOpacity();
+      if (delta > 0) {
+          opacity = std::min(opacity + 0.1, 1.0);
+      } else {
+          opacity = std::max(opacity - 0.1, 0.2); // 最低 0.2，防止完全消失
+      }
+      setWindowOpacity(opacity);
+      
+      // 显示当前透明度提示
+      QString tip = QString("Opacity: %1%").arg(int(opacity * 100));
+      QToolTip::showText(QCursor::pos(), tip, this);
+      return;
+  }
 
   // 滚轮调整窗口大小
   double factor = (delta > 0) ? 1.1 : 0.9;
