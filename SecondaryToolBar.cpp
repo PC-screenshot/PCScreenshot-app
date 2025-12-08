@@ -7,13 +7,14 @@
 #include <QColorDialog>
 #include <QPainter>
 #include <QPaintEvent>
-
+#include <QButtonGroup> 
 SecondaryToolBar::SecondaryToolBar(QWidget* parent)
     : QWidget(parent) {
     setFixedHeight(40);
     setAttribute(Qt::WA_StyledBackground, true);
     BuildUi();
     ApplyCommonStyle();
+    eraserModeGroup_ = new QButtonGroup(this);
 }
 
 void SecondaryToolBar::ApplyCommonStyle()
@@ -62,6 +63,27 @@ void SecondaryToolBar::BuildUi() {
     layout->addWidget(slider_, 0);
     layout->addWidget(valueLabel_);
     layout->addSpacing(10);
+
+    // 添加擦除模式切换按钮组
+    eraserModeGroup_ = new QButtonGroup(this);
+    pixelEraserBtn_ = new QToolButton(this);
+    pixelEraserBtn_->setText("Pixel");
+    pixelEraserBtn_->setCheckable(true);
+    pixelEraserBtn_->setAutoRaise(true);
+    eraserModeGroup_->addButton(pixelEraserBtn_, static_cast<int>(EraserType::PixelEraser));
+
+    objectEraserBtn_ = new QToolButton(this);
+    objectEraserBtn_->setText("Object");
+    objectEraserBtn_->setCheckable(true);
+    objectEraserBtn_->setAutoRaise(true);
+    eraserModeGroup_->addButton(objectEraserBtn_, static_cast<int>(EraserType::ObjectEraser));
+
+    // 设置默认选中像素擦除
+    pixelEraserBtn_->setChecked(true);
+    currentEraserType_ = EraserType::PixelEraser;
+
+    layout->addWidget(pixelEraserBtn_);
+    layout->addWidget(objectEraserBtn_);
 
     // 中间竖线分隔
     auto* sep = new QWidget(this);
@@ -138,6 +160,12 @@ void SecondaryToolBar::BuildUi() {
                 valueLabel_->setText(QString::number(v));
             }
             emit StrokeWidthChanged(v);
+        });
+    connect(eraserModeGroup_, QOverload<QAbstractButton*>::of(&QButtonGroup::buttonClicked),
+        this, [this](QAbstractButton*button) {
+            int id = eraserModeGroup_->id(button);
+            currentEraserType_ = static_cast<EraserType>(id);
+            emit EraserTypeChanged(currentEraserType_);
         });
 
     // 自定义颜色选择

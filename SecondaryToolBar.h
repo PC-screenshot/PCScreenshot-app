@@ -7,7 +7,7 @@
 class QSlider;
 class QLabel;
 class QToolButton;
-
+class QButtonGroup;
 // 形状 / 画笔 / 橡皮擦的二级工具栏：控制“粗细 + 颜色”
 class SecondaryToolBar : public QWidget {
     Q_OBJECT
@@ -18,6 +18,13 @@ public:
         StrokeMode,   // Rect / Ellipse / Arrow / Pen：粗细 + 颜色
         EraserMode    // Eraser：只有粗细
     };
+    //
+    enum EraserType {
+        PixelEraser,  // 像素擦除
+        ObjectEraser  // 对象擦除
+    };
+    //
+
 
     void SetMode(Mode m);
 
@@ -27,6 +34,7 @@ public:
 signals:
     void StrokeWidthChanged(int w);
     void StrokeColorChanged(const QColor& c);
+    void EraserTypeChanged(EraserType type);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -43,8 +51,11 @@ private:
     QWidget* colorPanel_ = nullptr; // 右侧颜色区域整体
     QLabel* colorText_ = nullptr; // “颜色”
     QToolButton* colorBtn_ = nullptr; // 自定义颜色按钮
-    QVector<QToolButton*> presetColorBtns_; // 常用颜色按钮
-
+    QVector<QToolButton*> presetColorBtns_;// 常用颜色按钮
+    QButtonGroup* eraserModeGroup_ = nullptr;
+    QToolButton* pixelEraserBtn_ = nullptr;
+    QToolButton* objectEraserBtn_ = nullptr;
+    EraserType currentEraserType_ = EraserType::PixelEraser;
     // --- 状态 ---
     Mode   mode_ = StrokeMode;
     int    strokeWidth_ = 4;
