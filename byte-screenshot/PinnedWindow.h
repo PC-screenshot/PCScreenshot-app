@@ -5,6 +5,7 @@
 #include <QWheelEvent>
 #include <QToolButton>
 #include <QPushButton>
+#include <QEnterEvent>
 
 class PinnedWindow : public QWidget {
   Q_OBJECT
@@ -18,8 +19,6 @@ class PinnedWindow : public QWidget {
   void setOcrEnabled(bool enabled);
 
  signals:
-  // 触发 OCR 请求，将当前图片传递出去
-  void ocrTriggered(const QPixmap& image);
   
   // 窗口关闭信号
   void windowClosed();
@@ -34,6 +33,7 @@ class PinnedWindow : public QWidget {
   void moveEvent(QMoveEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
   void enterEvent(QEnterEvent* event) override;
   void leaveEvent(QEvent* event) override;
   bool eventFilter(QObject* watched, QEvent* event) override;
