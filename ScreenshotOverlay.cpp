@@ -1,7 +1,7 @@
 #include "ScreenshotOverlay.h"
 #include <QPainterPath>      // 新增：QPainterPath
 #include <algorithm>         // 新增：std::min/std::max
-
+#include"ShapeDrawer.h"
 #include<vector>
 #include <QPainter>
 #include <QMouseEvent>
@@ -66,7 +66,10 @@ ScreenshotOverlay::ScreenshotOverlay(QWidget* parent)
 
     blurPopup_ = blurTool_->createSettingsWidget(this);
     blurPopup_->hide();
-
+    connect(sToolbar_, &SecondaryToolBar::EraserTypeChanged,
+        this, [this](SecondaryToolBar::EraserType eraserType) {
+            eraser_object_mode_ = (eraserType == SecondaryToolBar::EraserType::ObjectEraser);
+        });
     // 放大镜：使用整屏截图作为源
     magnifier_.setSourcePixmap(&background_);
     magnifier_.setLensSize(120);  // 可调
@@ -857,63 +860,23 @@ void ScreenshotOverlay::showToolPopup(QWidget* popup)
 void ScreenshotOverlay::RepaintCanvasFromItems(const DrawItem* preview /*= nullptr*/) {
     if (base_pixmap_.isNull()) return;
     canvas_ = base_pixmap_.copy();
-    QPainter p(&canvas_);
-    p.setRenderHint(QPainter::Antialiasing, true);
 
     auto drawItem = [&](const DrawItem& it) {
         switch (it.type) {
         case DrawItem::Type::kRect: {
-            QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-            p.setPen(pen);
-            p.setBrush(Qt::NoBrush);
-            p.drawRect(it.rect);
+            ShapeDrawer::DrawRect(canvas_, it.rect, it.color, it.stroke_width);
             break;
         }
         case DrawItem::Type::kEllipse: {
-            QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-            p.setPen(pen);
-            p.setBrush(Qt::NoBrush);
-            p.drawEllipse(it.rect);
+            ShapeDrawer::DrawEllipse(canvas_, it.rect, it.color, it.stroke_width);
             break;
         }
         case DrawItem::Type::kArrow: {
-            QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-            p.setPen(pen);
-            QPointF a = it.p1, b = it.p2;
-            p.drawLine(a, b);
-            // draw arrow head
-            QPointF dir = a - b;
-            double len = std::hypot(dir.x(), dir.y());
-            if (len > 0.1) {
-                double ux = dir.x() / len;
-                double uy = dir.y() / len;
-                double hl = std::max(10.0, it.stroke_width * 3.0);
-                double angle = M_PI / 6.0; // 30 degrees
-                QPointF p1 = b + QPointF(ux * hl * std::cos(angle) - uy * hl * std::sin(angle),
-                                         ux * hl * std::sin(angle) + uy * hl * std::cos(angle));
-                QPointF p2 = b + QPointF(ux * hl * std::cos(-angle) - uy * hl * std::sin(-angle),
-                                         ux * hl * std::sin(-angle) + uy * hl * std::cos(-angle));
-                QPolygonF poly;
-                poly << b << p1 << p2;
-                p.setBrush(it.color);
-                p.drawPolygon(poly);
-                p.setBrush(Qt::NoBrush);
-            }
+            ShapeDrawer::DrawArrow(canvas_, it.p1.toPoint(), it.p2.toPoint(), it.color, it.stroke_width);
             break;
         }
         case DrawItem::Type::kPen: {
-            if (it.path.size() >= 2) {
-                QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-                p.setPen(pen);
-                QPainterPath qp;
-                qp.moveTo(it.path[0]);
-                for (int i = 1; i < it.path.size(); ++i) qp.lineTo(it.path[i]);
-                p.drawPath(qp);
-            } else if (it.path.size() == 1) {
-                QPen pen(it.color, it.stroke_width, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
-                p.setPen(pen);
-                p.drawPoint(it.path[0]);
-            }
+            ShapeDrawer::DrawPen(canvas_, it.path, it.color, it.stroke_width);
             break;
         }
         case DrawItem::Type::kMosaic: {
@@ -930,30 +893,7 @@ void ScreenshotOverlay::RepaintCanvasFromItems(const DrawItem* preview /*= nullp
             break;
         }
         case DrawItem::Type::kEraserFree: {
-            // 将 base_pixmap_ 上对应圆刷区域复制回 canvas_
-            QImage baseImg = base_pixmap_.toImage();
-            QImage dstImg = canvas_.toImage();
-            int radius = it.stroke_width / 2;
-            for (const QPoint& pt : it.path) {
-                int cx = pt.x();
-                int cy = pt.y();
-                int x0 = std::max(0, cx - radius);
-                int y0 = std::max(0, cy - radius);
-                int x1 = min(baseImg.width()-1, cx + radius);
-                int y1 = min(baseImg.height()-1, cy + radius);
-                for (int y = y0; y <= y1; ++y) {
-                    for (int x = x0; x <= x1; ++x) {
-                        int dx = x - cx;
-                        int dy = y - cy;
-                        if (dx*dx + dy*dy <= radius*radius) {
-                            dstImg.setPixel(x, y, baseImg.pixel(x,y));
-                        }
-                    }
-                }
-            }
-            canvas_ = QPixmap::fromImage(dstImg);
-            p.end();
-            p.begin(&canvas_);
+            ShapeDrawer::ErasePen(canvas_, it.path, it.stroke_width);
             break;
         }
         default:
@@ -971,7 +911,6 @@ void ScreenshotOverlay::RepaintCanvasFromItems(const DrawItem* preview /*= nullp
         drawItem(*preview);
     }
 
-    p.end();
     update();
 }
 
