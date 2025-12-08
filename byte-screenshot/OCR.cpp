@@ -162,11 +162,56 @@ public:
         // 调用推理接口
         std::vector<OCRPredictResult> ocr_results = ocr_system_->ocr(img, true, true, true);
         
-        // 智能文本合并逻辑 (Smart Paragraph Merging) - 用户请求移除，恢复为简单换行
+        // 智能文本合并逻辑 (Smart Paragraph Merging)
         QString fullText;
-        for (const auto& res : ocr_results) {
-            if (res.score < 0.5) continue;
-            fullText += QString::fromStdString(res.text) + "\n";
+        if (!ocr_results.empty()) {
+            // 1. 过滤低置信度结果
+            std::vector<OCRPredictResult> valid_results;
+            for (const auto& res : ocr_results) {
+                if (res.score >= 0.5) {
+                    valid_results.push_back(res);
+                }
+            }
+
+            // 2. 遍历合并
+            for (size_t i = 0; i < valid_results.size(); ++i) {
+                const auto& curr = valid_results[i];
+                QString currText = QString::fromStdString(curr.text);
+                
+                fullText += currText;
+
+                // 检查是否需要换行
+                bool needNewLine = true;
+                if (i < valid_results.size() - 1) {
+                    const auto& next = valid_results[i + 1];
+                    
+                    // 计算垂直距离 (当前框底部 到 下一个框顶部)
+                    // box 顺序: 0:左上, 1:右上, 2:右下, 3:左下
+                    int currBottom = std::max(curr.box[2][1], curr.box[3][1]);
+                    int nextTop = std::min(next.box[0][1], next.box[1][1]);
+                    int verticalGap = nextTop - currBottom;
+                    
+                    // 计算当前行高
+                    int currHeight = currBottom - std::min(curr.box[0][1], curr.box[1][1]);
+                    
+                    // 启发式规则：
+                    // 1. 垂直间距小于行高的一半 -> 可能是同一段落
+                    // 2. 当前行结尾不是标点符号 -> 可能是同一段落被截断
+                    bool smallGap = verticalGap < (currHeight * 0.6);
+                    bool endsWithPunctuation = currText.endsWith('.') || currText.endsWith('!') || 
+                                             currText.endsWith('?') || currText.endsWith(u'。') || 
+                                             currText.endsWith(u'！') || currText.endsWith(u'？');
+                    
+                    if (smallGap && !endsWithPunctuation) {
+                        needNewLine = false;
+                        fullText += " "; // 补充空格
+                    }
+                }
+
+                if (needNewLine) {
+                    fullText += "\n";
+                }
+            }
         }
         
         if (fullText.isEmpty() && !ocr_results.empty()) {
@@ -228,17 +273,8 @@ QString OcrEngine::detectText(const QImage& image) {
 
     qDebug() << "OCR Start... Image Size:" << image.size();
 
-    // 图像预处理：如果图片过大，进行缩放以减少内存占用并加速推理
-    // 限制长边最大为 1600 (PaddleOCR 默认 limit_side_len=960，但在转换前缩放能减少 QImageToCvMat 的开销)
-    QImage processedImg = image;
-    int maxSide = 1600;
-    if (processedImg.width() > maxSide || processedImg.height() > maxSide) {
-        processedImg = processedImg.scaled(maxSide, maxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        qDebug() << "Image scaled to:" << processedImg.size() << "for performance optimization.";
-    }
-
     // 1. QImage -> cv::Mat
-    cv::Mat mat = QImageToCvMat(processedImg);
+    cv::Mat mat = QImageToCvMat(image);
 
     // 2. Run Inference
     QString result;

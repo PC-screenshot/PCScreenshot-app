@@ -2,13 +2,11 @@
 
 #include <QDialog>
 #include <QPixmap>
-#include <QPoint>
 #include <QScrollArea>
 
 class QLabel;
 class QTextEdit;
 class QPushButton;
-class QToolButton;
 
 class OcrResultDialog : public QDialog {
     Q_OBJECT
@@ -24,24 +22,15 @@ public:
     void AppendResultText(const QString& text);
 
 protected:
-    void mousePressEvent(QMouseEvent* event) override;
-    void mouseMoveEvent(QMouseEvent* event) override;
-    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
-    void moveEvent(QMoveEvent* event) override;
-    void wheelEvent(QWheelEvent* event) override;
-    void enterEvent(QEnterEvent* event) override;
-    void leaveEvent(QEvent* event) override;
-    void closeEvent(QCloseEvent* event) override;
     void showEvent(QShowEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
 
 private slots:
     void OnCopy();
-    void CheckHideUi();
 
 private:
     void SetupUi();
-    void UpdateToolbarPosition();
     void UpdateImageScale();
 
     QPixmap pixmap_;
@@ -52,14 +41,9 @@ private:
     QTextEdit* text_edit_ = nullptr;
     
     // UI Components
-    QPushButton* close_btn_ = nullptr; // Top-right close button
-    QWidget* tool_bar_ = nullptr;      // Floating toolbar
-    QToolButton* btn_copy_ = nullptr;
-    
-    // Dragging state
-    bool dragging_ = false;
-    QPoint drag_offset_;
-    
+    QPushButton* btn_copy_ = nullptr;
+    QPushButton* btn_close_ = nullptr;
+
     // Zoom state
     double scale_factor_ = 1.0;
 };
