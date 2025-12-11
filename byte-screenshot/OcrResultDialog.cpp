@@ -14,7 +14,6 @@
 OcrResultDialog::OcrResultDialog(const QPixmap& pixmap, const QString& text, QWidget* parent)
     : QDialog(parent), pixmap_(pixmap), text_(text) {
     
-    // Keep AlwaysOnTop as it's a screenshot tool helper
     setWindowFlags(Qt::Window | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_DeleteOnClose);
     
@@ -70,11 +69,11 @@ void OcrResultDialog::SetupUi() {
     main_layout->setContentsMargins(10, 10, 10, 10);
     main_layout->setSpacing(10);
 
-    // Center area: Image + Text
+    // 图片和文本
     auto* center_layout = new QHBoxLayout();
     center_layout->setSpacing(10);
 
-    // Left: Image in ScrollArea
+    // 分栏；左边区域放图片
     scroll_area_ = new QScrollArea(this);
     scroll_area_->setWidgetResizable(false); // We control widget size manually for zoom
     scroll_area_->setAlignment(Qt::AlignCenter);
@@ -88,7 +87,7 @@ void OcrResultDialog::SetupUi() {
     
     center_layout->addWidget(scroll_area_, 1);
 
-    // Right: Text
+    // 右边文本
     text_edit_ = new QTextEdit(this);
     text_edit_->setReadOnly(true);
     text_edit_->setPlainText(text_);
@@ -99,13 +98,13 @@ void OcrResultDialog::SetupUi() {
 
     main_layout->addLayout(center_layout, 1);
 
-    // Separator line
+    // 左右边界线
     auto* line = new QFrame(this);
     line->setFrameShape(QFrame::HLine);
     line->setFrameShadow(QFrame::Sunken);
     main_layout->addWidget(line);
 
-    // Bottom area: Buttons
+    // 基础按钮
     auto* btn_layout = new QHBoxLayout();
     btn_layout->setSpacing(10);
     btn_layout->addStretch();

@@ -63,6 +63,8 @@ PinnedWindow::PinnedWindow(const QPixmap& pixmap, QWidget* parent)
   SetupUi();
 }
 
+
+// init
 void PinnedWindow::SetupUi() {
   close_btn_ = new QPushButton(this);
   close_btn_->setIcon(style()->standardIcon(QStyle::SP_TitleBarCloseButton));
@@ -164,6 +166,7 @@ void PinnedWindow::paintEvent(QPaintEvent* /*event*/) {
   p.drawRect(rect().adjusted(0, 0, -1, -1));
 }
 
+// move
 void PinnedWindow::mousePressEvent(QMouseEvent* event) {
   if (event->button() == Qt::LeftButton) {
     if (close_btn_ && close_btn_->isVisible() && close_btn_->geometry().contains(event->pos())) {
@@ -190,6 +193,8 @@ void PinnedWindow::mouseReleaseEvent(QMouseEvent* event) {
   }
 }
 
+
+// create
 PinnedWindow* PinnedWindow::CreatePinnedWindow(const QPixmap& pixmap, QWidget* parent) {
   if (pixmap.isNull()) {
     return nullptr;
@@ -216,6 +221,7 @@ void PinnedWindow::keyPressEvent(QKeyEvent* event) {
   QWidget::keyPressEvent(event);
 }
 
+// Opacity & Size
 void PinnedWindow::wheelEvent(QWheelEvent* event) {
   const int delta = event->angleDelta().y();
   if (delta == 0) return;
@@ -336,6 +342,7 @@ void PinnedWindow::OnTogglePin() {
     UpdatePinButtonState();
 }
 
+// call OCR
 void PinnedWindow::OnOcr() {
     auto* engine = &OcrEngine::instance();
     

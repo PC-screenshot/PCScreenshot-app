@@ -10,6 +10,8 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <paddle_inference_api.h>
+#include <algorithm>
+#include <QRect>
 
 #include "paddleocr.h"
 #include "args.h"
@@ -32,6 +34,7 @@ public:
     PaddleOcrInternal() {}
     ~PaddleOcrInternal() {}
 
+    // Paddle Model Path Check
     bool init(const QString& userModelDir) {
 #ifdef USE_PADDLE_OCR
         QString baseDir;
@@ -117,12 +120,13 @@ public:
             return false;
         }
 
+        // OCR Engine Settings
         FLAGS_use_gpu = false;
-        FLAGS_enable_mkldnn = true; // 禁用 MKLDNN 以避免潜在的兼容性问题
-        FLAGS_use_angle_cls = true;
+        FLAGS_enable_mkldnn = true; 
+        FLAGS_use_angle_cls = true;  // 纠正旋转文本
         
-        // 内存优化配置
-        FLAGS_cpu_threads = 2;       // 限制 CPU 线程数，降低内存占用 (默认可能为 10)
+        // 减少线程数以降低内存峰值
+        FLAGS_cpu_threads = 1;       // 限制为单线程
         FLAGS_benchmark = false;     // 关闭 Benchmark 模式
         FLAGS_rec_batch_num = 1;     // 减少批处理数量
         FLAGS_cls_batch_num = 1;
@@ -160,56 +164,118 @@ public:
         }
 
         // 调用推理接口
-        std::vector<OCRPredictResult> ocr_results = ocr_system_->ocr(img, true, true, true);
+        std::vector<OCRPredictResult> ocr_results = ocr_system_->ocr(img, true, true, false);
         
-        // 智能文本合并逻辑 (Smart Paragraph Merging)
+        // 更新段落合并方法
         QString fullText;
+        qDebug() << "Pallde Results:";
         if (!ocr_results.empty()) {
-            // 1. 过滤低置信度结果
-            std::vector<OCRPredictResult> valid_results;
+            // 1. 过滤低置信度结果 & 转换为内部结构
+            struct OcrBox {
+                QRect rect;
+                QString text;
+            };
+            std::vector<OcrBox> boxes;
+            
             for (const auto& res : ocr_results) {
                 if (res.score >= 0.5) {
-                    valid_results.push_back(res);
+                     // Paddle box: [0]=TL, [1]=TR, [2]=BR, [3]=BL
+                     // 计算包围盒
+                     int x_coords[] = {res.box[0][0], res.box[1][0], res.box[2][0], res.box[3][0]};
+                     int y_coords[] = {res.box[0][1], res.box[1][1], res.box[2][1], res.box[3][1]};
+                     
+                     int x_min = x_coords[0], x_max = x_coords[0];
+                     int y_min = y_coords[0], y_max = y_coords[0];
+                     for(int k=1; k<4; k++) {
+                         if(x_coords[k] < x_min) x_min = x_coords[k];
+                         if(x_coords[k] > x_max) x_max = x_coords[k];
+                         if(y_coords[k] < y_min) y_min = y_coords[k];
+                         if(y_coords[k] > y_max) y_max = y_coords[k];
+                     }
+                     
+                     QString text = QString::fromStdString(res.text);
+                     boxes.push_back({QRect(QPoint(x_min, y_min), QPoint(x_max, y_max)), text});
+                     
+                     qDebug() << "PADDLE Text:" << text 
+                              << "Score:" << res.score
+                              << "Rect:" << x_min << y_min << x_max << y_max;
                 }
             }
 
-            // 2. 遍历合并
-            for (size_t i = 0; i < valid_results.size(); ++i) {
-                const auto& curr = valid_results[i];
-                QString currText = QString::fromStdString(curr.text);
-                
-                fullText += currText;
+            // 先按 Top 坐标排序，保证处理顺序大致从上到下
+            std::sort(boxes.begin(), boxes.end(), [](const OcrBox& a, const OcrBox& b) {
+                return a.rect.top() < b.rect.top();
+            });
 
-                // 检查是否需要换行
-                bool needNewLine = true;
-                if (i < valid_results.size() - 1) {
-                    const auto& next = valid_results[i + 1];
+            struct Row {
+                int top, bottom;
+                std::vector<OcrBox> items;
+                
+                // 更新行的边界
+                void add(const OcrBox& b) {
+                    items.push_back(b);
+                    // 动态更新行的上下界，取并集
+                    top = std::min(top, b.rect.top());
+                    bottom = std::max(bottom, b.rect.bottom());
+                }
+                
+                // 判断是否属于同一行（基于垂直重叠）
+                bool isSameLine(const OcrBox& b) {
+                    int overlapStart = std::max(top, b.rect.top());
+                    int overlapEnd = std::min(bottom, b.rect.bottom());
+                    int overlapHeight = overlapEnd - overlapStart;
                     
-                    // 计算垂直距离 (当前框底部 到 下一个框顶部)
-                    // box 顺序: 0:左上, 1:右上, 2:右下, 3:左下
-                    int currBottom = std::max(curr.box[2][1], curr.box[3][1]);
-                    int nextTop = std::min(next.box[0][1], next.box[1][1]);
-                    int verticalGap = nextTop - currBottom;
+                    if (overlapHeight <= 0) return false;
                     
-                    // 计算当前行高
-                    int currHeight = currBottom - std::min(curr.box[0][1], curr.box[1][1]);
-                    
-                    // 启发式规则：
-                    // 1. 垂直间距小于行高的一半 -> 可能是同一段落
-                    // 2. 当前行结尾不是标点符号 -> 可能是同一段落被截断
-                    bool smallGap = verticalGap < (currHeight * 0.6);
-                    bool endsWithPunctuation = currText.endsWith('.') || currText.endsWith('!') || 
-                                             currText.endsWith('?') || currText.endsWith(u'。') || 
-                                             currText.endsWith(u'！') || currText.endsWith(u'？');
-                    
-                    if (smallGap && !endsWithPunctuation) {
-                        needNewLine = false;
-                        fullText += " "; // 补充空格
+                    int rowH = bottom - top;
+                    int boxH = b.rect.height();
+                    // 重叠高度超过较小高度的一半，视为同一行
+                    return overlapHeight > (std::min(rowH, boxH) * 0.5);
+                }
+            };
+            
+            std::vector<Row> rows;
+            for (const auto& box : boxes) {
+                bool added = false;
+                // 尝试加入当前最后一行
+                if (!rows.empty() && rows.back().isSameLine(box)) {
+                    rows.back().add(box);
+                    added = true;
+                }
+                
+                if (!added) {
+                    rows.push_back({box.rect.top(), box.rect.bottom(), {box}});
+                }
+            }
+            
+            qDebug() << "Rows Detected:" << rows.size();
+
+            // 3. 逐行合并文本
+            for (size_t r = 0; r < rows.size(); ++r) {
+                auto& row = rows[r];
+                
+                // 行内按 X 坐标排序 (从左到右)
+                std::sort(row.items.begin(), row.items.end(), [](const OcrBox& a, const OcrBox& b) {
+                    return a.rect.left() < b.rect.left();
+                });
+
+                for (size_t i = 0; i < row.items.size(); ++i) {
+                    const auto& curr = row.items[i];
+                    fullText += curr.text;
+
+                    if (i < row.items.size() - 1) {
+                         const auto& next = row.items[i + 1];
+                         // 检查水平间距，决定是否加空格
+                         int dist = next.rect.left() - curr.rect.right();
+                         // 简单的空格策略：如果间距大于0，加空格（或者是代码中的自然间隔）
+                         // 对于代码场景，通常都需要空格分隔
+                         fullText += " ";
                     }
                 }
-
-                if (needNewLine) {
-                    fullText += "\n";
+                
+                // 换行
+                if (r < rows.size() - 1) {
+                    fullText += "\n"; 
                 }
             }
         }
@@ -220,7 +286,10 @@ public:
             return "No text detected.";
         }
         
-        return fullText.trimmed();
+        QString finalResult = fullText.trimmed();
+        qDebug() << finalResult;
+        
+        return finalResult;
 #else
         Q_UNUSED(img);
         return "OCR not enabled.";
@@ -266,23 +335,26 @@ void OcrEngine::release() {
     is_initialized_ = false;
 }
 
+#include <QElapsedTimer>
+
 QString OcrEngine::detectText(const QImage& image) {
     if (image.isNull()) {
         return "Error: Empty Image";
     }
 
-    qDebug() << "OCR Start... Image Size:" << image.size();
+    QElapsedTimer timer;
+    timer.start();
+
+    //qDebug() << Image Size: << image.size();
 
     // 1. QImage -> cv::Mat
     cv::Mat mat = QImageToCvMat(image);
 
-    // 2. Run Inference
+    // 2. 推理
     QString result;
     if (is_initialized_) {
         result = internal_->detect(mat);
     } else {
-        // 尝试默认初始化（如果未手动调用 init）
-        // 优先使用运行目录下的 inference 目录
         QString defaultModelPath = QCoreApplication::applicationDirPath() + "/inference";
         if (init(defaultModelPath)) {
             result = internal_->detect(mat);
@@ -291,8 +363,11 @@ QString OcrEngine::detectText(const QImage& image) {
         }
     }
 
-    // 3. 立即释放资源以降低内存占用 (Stateless Mode)
+    // 降低内存占用
     release();
+    
+    qint64 elapsed = timer.elapsed();
+    qDebug() << "OCR Total Time Cost:" << elapsed << "ms";
 
     return result;
 }
@@ -311,7 +386,6 @@ cv::Mat OcrEngine::QImageToCvMat(const QImage& image) {
         break;
     case QImage::Format_RGB888:
         mat = cv::Mat(image.height(), image.width(), CV_8UC3, (void*)image.constBits(), image.bytesPerLine());
-        // QImage RGB888 是 R,G,B -> OpenCV 需要 B,G,R
         cv::cvtColor(mat, matClone, cv::COLOR_RGB2BGR);
         break;
     case QImage::Format_Grayscale8:
