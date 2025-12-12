@@ -1,0 +1,23 @@
+<RCC>
+    <qresource prefix="bytescreenshot">
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="icons8-cut-64.png">icons/icons8-cut-64.png</file>
+        <file alias="icons8-rectangle-40.png">icons/icons8-rectangle-40.png</file>
+        <file alias="icons8-ellipse-40.png">icons/icons8-ellipse-40.png</file>
+        <file alias="icons8-arrow-40.png">icons/icons8-arrow-40.png</file>
+        <file alias="icons8-edit-pencil-50.png">icons/icons8-edit-pencil-50.png</file>
+        <file alias="icons8-eraser-40.png">icons/icons8-eraser-40.png</file>
+        <file alias="icons8-modern-art-48.png">icons/icons8-modern-art-48.png</file>
+        <file alias="icons8-blur-50.png">icons/icons8-blur-50.png</file>
+        <file alias="icons8-undo-40.png">icons/icons8-undo-40.png</file>
+        <file alias="icons8-redo-40.png">icons/icons8-redo-40.png</file>
+        <file alias="icons8-ocr-40.png">icons/icons8-ocr-40.png</file>
+        <file alias="icons8-ai-50.png">icons/icons8-ai-50.png</file>
+        <file alias="icons8-double-down-50.png">icons/icons8-double-down-50.png</file>
+        <file alias="icons8-pin-50.png">icons/icons8-pin-50.png</file>
+        <file alias="icons8-save-40.png">icons/icons8-save-40.png</file>
+        <file alias="icons8-multiply-40.png">icons/icons8-multiply-40.png</file>
+        <file alias="icons8-done-40.png">icons/icons8-done-40.png</file>
+    </qresource>
+</RCC>
