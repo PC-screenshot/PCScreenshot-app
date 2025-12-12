@@ -1,53 +1,63 @@
+// MainWindow.cpp
 #include "MainWindow.h"
 
-#include <QPushButton>
-#include <QLabel>
-#include <QVBoxLayout>
+#include <QAction>
+#include <QApplication>
+#include <QIcon>
 
 MainWindow::MainWindow(QWidget* parent)
     : QWidget(parent)
 {
-    QVBoxLayout* layout = new QVBoxLayout(this);
+    // 这个窗口我们不显示，所以不需要布局、按钮
+    hide();
+    setWindowTitle("Screenshot Tool");
+    setWindowIcon(QIcon(":/icons/icons8-cut-64.png"));  
 
-    QPushButton* btn = new QPushButton("Start Capture", this);
-    layout->addWidget(btn);
+    createTrayIcon();
+}
 
-    connect(btn, &QPushButton::clicked,
+void MainWindow::createTrayIcon()
+{
+    trayIcon_ = new QSystemTrayIcon(this);
+    trayIcon_->setIcon(QIcon(":/icons/icons8-cut-64.png")); // 托盘图标
+
+    // 托盘右键菜单
+    trayMenu_ = new QMenu();
+
+    QAction* actCapture = trayMenu_->addAction("Capture Screen");
+    QAction* actQuit = trayMenu_->addAction("Quit");
+
+    trayIcon_->setContextMenu(trayMenu_);
+    trayIcon_->show();
+
+    // 右键菜单 -> 截图
+    connect(actCapture, &QAction::triggered,
         this, &MainWindow::OnStartCapture);
 
-    resize(300, 200);
-    setWindowTitle("Screenshot Tool (Qt6 + QWidget)");
+    // 右键菜单 -> 退出
+    connect(actQuit, &QAction::triggered,
+        qApp, &QCoreApplication::quit);
+
+    // 左键单击托盘图标也直接截图
+    connect(trayIcon_, &QSystemTrayIcon::activated,
+        this, [this](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger) {   // 左键单击
+                OnStartCapture();
+            }
+        });
 }
 
-void MainWindow::OnStartCapture() {
+void MainWindow::OnStartCapture()
+{
+    // 1. 先截一张整屏图
     QPixmap full = capture_manager_.CaptureFullScreen();
 
-    ScreenshotOverlay* overlay = new ScreenshotOverlay();
+    // 2. 创建截图/编辑界面
+    auto* overlay = new ScreenshotOverlay(nullptr);
     overlay->SetBackground(full);
 
-    connect(overlay, &ScreenshotOverlay::RegionSelected,
-        this, &MainWindow::OnRegionSelected);
+    // 窗口关闭时自动 delete
+    overlay->setAttribute(Qt::WA_DeleteOnClose);
 
     overlay->show();
-}
-
-void MainWindow::OnRegionSelected(const QRect& rect) {
-    QPixmap shot = capture_manager_.CaptureRect(rect);
-
-    // New window to show the screenshot
-    QWidget* preview = new QWidget();
-    preview->setAttribute(Qt::WA_TranslucentBackground);
-
-    // Remove ALL borders, title bar, frame
-    preview->setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
-
-    // Create a label to display the image
-    QLabel* label = new QLabel(preview);
-    label->setPixmap(shot);
-    label->resize(shot.size());
-
-    // Resize preview window to fit the image exactly
-    preview->resize(shot.size());
-
-    preview->show();
 }
