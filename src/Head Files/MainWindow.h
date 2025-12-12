@@ -1,19 +1,26 @@
+// MainWindow.h
 #pragma once
 
 #include <QWidget>
-#include "ScreenCaptureManager.h"
+#include <QSystemTrayIcon>
+#include <QMenu>
+
 #include "ScreenshotOverlay.h"
+#include "ScreenCaptureManager.h"
 
 class MainWindow : public QWidget {
-	Q_OBJECT
-
+    Q_OBJECT
 public:
-	explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(QWidget* parent = nullptr);
 
 private slots:
-	void OnStartCapture();
-	void OnRegionSelected(const QRect& rect);
+    void OnStartCapture();      // 截图入口
 
 private:
-	ScreenCaptureManager capture_manager_;
+    void createTrayIcon();      // 创建托盘图标和菜单
+
+    QSystemTrayIcon* trayIcon_ = nullptr;
+    QMenu* trayMenu_ = nullptr;
+
+    ScreenCaptureManager   capture_manager_;
 };
